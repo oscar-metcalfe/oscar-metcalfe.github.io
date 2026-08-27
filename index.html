@@ -321,6 +321,7 @@
     <button data-view="planner">Planner</button>
     <button data-view="context">By Context</button>
     <button data-view="priority">By Priority</button>
+    <button data-view="completed">Completed</button>
   </nav>
 </header>
 
@@ -399,6 +400,10 @@
 
   <section class="view" id="view-priority">
     <div id="priorityGroups"></div>
+  </section>
+
+  <section class="view" id="view-completed">
+    <div class="ledger" id="completedList"></div>
   </section>
 
 </main>
@@ -1008,7 +1013,7 @@
     var wkStart = addDays(startOfWeek(new Date()), weekOffset*7);
     var wkEnd = addDays(wkStart,6);
     document.getElementById("weekLabel").textContent = fmtDate(isoFromDate(wkStart))+" \u2013 "+fmtDate(isoFromDate(wkEnd))+(weekOffset===0?" (this week)":"");
-    var all = flattenAll().filter(function(e){ return e.node.dueDate; });
+    var all = flattenAll().filter(function(e){ return e.node.dueDate && e.node.status!=="done"; });
     var container = document.getElementById("weekDays"); container.innerHTML="";
     for(var i=0;i<7;i++){
       var day = addDays(wkStart,i); var iso = isoFromDate(day);
@@ -1032,7 +1037,7 @@
   // ---------------- Rendering: By Context ----------------
   function renderContextView(){
     var wrap = document.getElementById("contextGroups"); wrap.innerHTML="";
-    var all = flattenAll().filter(function(e){ return e.node.context; });
+    var all = flattenAll().filter(function(e){ return e.node.context && e.node.status!=="done"; });
     if(all.length===0){ wrap.innerHTML = '<div class="empty-hint">No context tags assigned yet. Open any item to add one.</div>'; return; }
     var groups = {};
     all.forEach(function(e){ var k=e.node.context; groups[k]=groups[k]||[]; groups[k].push(e); });
@@ -1040,8 +1045,6 @@
       var h=document.createElement("div"); h.className="ctx-group-title"; h.textContent="@"+tag+" \u00b7 "+groups[tag].length; wrap.appendChild(h);
       var ledger=document.createElement("div"); ledger.className="ledger";
       groups[tag].sort(function(a,b){
-        if(a.node.status==="done" && b.node.status!=="done") return 1;
-        if(b.node.status==="done" && a.node.status!=="done") return -1;
         return (a.node.dueDate||"9999") < (b.node.dueDate||"9999") ? -1:1;
       }).forEach(function(e){ ledger.appendChild(buildLedgerRow(e)); });
       wrap.appendChild(ledger);
@@ -1052,20 +1055,26 @@
   function renderPriorityGroups(){
     var wrap = document.getElementById("priorityGroups"); wrap.innerHTML="";
     var order = ["high","med","low"], labels = {high:"High priority", med:"Medium priority", low:"Low priority"};
-    var all = flattenAll().filter(function(e){ return e.node.level>1; });
+    var all = flattenAll().filter(function(e){ return e.node.level>1 && e.node.status!=="done"; });
     order.forEach(function(p){
       var items = all.filter(function(e){ return (e.node.priority||"med")===p; });
       if(items.length===0) return;
       var h=document.createElement("div"); h.className="ctx-group-title"; h.textContent=labels[p]+" \u00b7 "+items.length; wrap.appendChild(h);
       var ledger=document.createElement("div"); ledger.className="ledger";
       items.sort(function(a,b){
-        if(a.node.status==="done" && b.node.status!=="done") return 1;
-        if(b.node.status==="done" && a.node.status!=="done") return -1;
         return (a.node.dueDate||"9999") < (b.node.dueDate||"9999") ? -1:1;
       }).forEach(function(e){ ledger.appendChild(buildLedgerRow(e)); });
       wrap.appendChild(ledger);
     });
     if(wrap.children.length===0) wrap.innerHTML = '<div class="empty-hint">No tasks yet.</div>';
+  }
+
+  // ---------------- Rendering: Completed ----------------
+  function renderCompletedList(){
+    var wrap = document.getElementById("completedList"); wrap.innerHTML="";
+    var items = flattenAll().filter(function(e){ return e.node.level>1 && e.node.status==="done"; });
+    if(items.length===0){ wrap.innerHTML = '<div class="empty-hint">Nothing completed yet.</div>'; return; }
+    items.forEach(function(e){ wrap.appendChild(buildLedgerRow(e)); });
   }
 
   // ---------------- Edit sheet ----------------
@@ -1335,7 +1344,7 @@
   }
 
   function renderAll(){
-    renderQuickAddOptions(); renderProjectCards(); renderDueList(); renderTree(); renderPlanner(); renderContextView(); renderPriorityGroups();
+    renderQuickAddOptions(); renderProjectCards(); renderDueList(); renderTree(); renderPlanner(); renderContextView(); renderPriorityGroups(); renderCompletedList();
   }
 
   // ---------------- Wiring ----------------

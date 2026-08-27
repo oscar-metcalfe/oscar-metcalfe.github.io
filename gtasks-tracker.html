@@ -1,0 +1,1417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Ledger — Google Tasks</title>
+<script src="https://accounts.google.com/gsi/client" async defer onload="window.__gisLoaded=true"></script>
+<style>
+  :root{
+    --ink:#1E2B23;
+    --ink-2:#28382E;
+    --paper:#F1ECDD;
+    --paper-dim:#E6DFC9;
+    --paper-dim-2:#DCD3B6;
+    --rule:#C9BFA0;
+    --rule-dark:#3A4B3F;
+    --amber:#B5822A;
+    --amber-dim:#EADCB8;
+    --rust:#A8452F;
+    --rust-dim:#F0D9D0;
+    --slate:#3E6470;
+    --slate-dim:#D9E4E6;
+    --moss:#5B7052;
+    --moss-dim:#DEE6D6;
+    --text:#28241C;
+    --text-dim:#6B6353;
+    --text-inv:#F1ECDD;
+    --serif: Georgia, 'Iowan Old Style', 'Times New Roman', serif;
+    --mono: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color: transparent;}
+  html,body{margin:0;padding:0;background:var(--paper);color:var(--text);font-family:var(--sans);}
+  body{padding-bottom:72px;}
+  ::selection{background:var(--amber-dim);}
+
+  header.app-header{
+    position:sticky; top:0; z-index:40;
+    background:var(--ink); color:var(--text-inv);
+    padding:14px 16px 0 16px; box-shadow:0 2px 6px rgba(0,0,0,0.15);
+  }
+  .brand-row{display:flex; align-items:baseline; justify-content:space-between; gap:8px;}
+  .brand{font-family:var(--serif); font-weight:700; font-size:1.35rem; letter-spacing:0.02em;}
+  .brand small{
+    display:block; font-family:var(--mono); font-size:0.62rem; letter-spacing:0.16em;
+    text-transform:uppercase; color:#B9C4B4; margin-top:2px;
+  }
+  .header-actions{display:flex; gap:8px; align-items:center;}
+  .icon-btn{
+    background:transparent; border:1px solid #48584D; color:var(--text-inv);
+    border-radius:6px; padding:7px 10px; font-family:var(--mono); font-size:0.72rem;
+    cursor:pointer; letter-spacing:0.03em;
+  }
+  .icon-btn:active{background:#33443A;}
+  .save-indicator{
+    font-family:var(--mono); font-size:0.62rem; letter-spacing:0.03em; color:#8FA389;
+    align-self:center; padding:4px 4px; cursor:default; white-space:nowrap;
+  }
+  .save-indicator.saving{color:#D9C98A;}
+  .save-indicator.saved{color:#9FD3A0;}
+  .save-indicator.error{color:#E7A98C; cursor:pointer; text-decoration:underline;}
+  .load-banner{
+    background:var(--rust-dim); color:var(--rust); border:1px solid var(--rust);
+    border-radius:8px; padding:11px 12px; margin-bottom:16px; font-size:0.82rem; line-height:1.4;
+  }
+  .load-banner.empty-variant{background:var(--slate-dim); color:var(--slate); border-color:var(--slate);}
+  .load-banner .btn{margin-top:9px; margin-right:8px;}
+  nav.tabs{display:flex; gap:2px; margin-top:14px; overflow-x:auto; scrollbar-width:none;}
+  nav.tabs::-webkit-scrollbar{display:none;}
+  nav.tabs button{
+    flex:0 0 auto; background:transparent; border:none; color:#AEBBA8;
+    font-family:var(--mono); font-size:0.72rem; letter-spacing:0.05em; text-transform:uppercase;
+    padding:10px 14px; cursor:pointer; border-bottom:2px solid transparent; white-space:nowrap;
+  }
+  nav.tabs button.active{color:var(--text-inv); border-bottom-color:var(--amber);}
+
+  main{max-width:820px; margin:0 auto; padding:18px 14px 40px 14px;}
+  .view{display:none;}
+  .view.active{display:block; animation:fade .15s ease;}
+  @keyframes fade{from{opacity:0} to{opacity:1}}
+
+  h2.section-title{
+    font-family:var(--serif); font-size:1.05rem; font-weight:700; margin:22px 0 10px 0;
+    display:flex; align-items:center; gap:8px;
+  }
+  h2.section-title:first-child{margin-top:0;}
+  h2.section-title .rule{flex:1; height:1px; background:var(--rule);}
+
+  .quick-add{
+    background:var(--paper-dim); border:1px solid var(--rule); border-radius:8px;
+    padding:10px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;
+  }
+  .quick-add select, .quick-add input[type=text]{
+    font-family:var(--sans); font-size:0.85rem; border:1px solid var(--rule); border-radius:6px;
+    background:var(--paper); color:var(--text); padding:8px 9px;
+  }
+  .quick-add select{flex:0 0 auto; max-width:150px;}
+  .quick-add input[type=text]{flex:1 1 160px; min-width:120px;}
+  .quick-add button{
+    background:var(--ink); color:var(--text-inv); border:none; border-radius:6px;
+    padding:8px 14px; font-family:var(--mono); font-size:0.72rem; letter-spacing:0.04em;
+    text-transform:uppercase; cursor:pointer;
+  }
+  .quick-add button:active{background:var(--ink-2);}
+
+  .card-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px;}
+  .proj-card{
+    background:var(--paper-dim); border:1px solid var(--rule); border-radius:8px; padding:12px 13px;
+    cursor:pointer; transition:border-color .1s;
+  }
+  .proj-card:active{border-color:var(--amber);}
+  .proj-card .pc-top{display:flex; justify-content:space-between; align-items:flex-start; gap:6px;}
+  .proj-card .pc-title{font-family:var(--serif); font-weight:700; font-size:0.98rem; line-height:1.25;}
+  .proj-card .pc-count{font-family:var(--mono); font-size:0.68rem; color:var(--text-dim); white-space:nowrap;}
+  .proj-card .pc-bar{margin-top:9px; height:5px; background:var(--paper-dim-2); border-radius:3px; overflow:hidden;}
+  .proj-card .pc-bar-fill{height:100%; background:var(--moss);}
+  .proj-card .pc-meta{margin-top:8px; font-family:var(--mono); font-size:0.66rem; color:var(--text-dim);}
+  .empty-hint{font-family:var(--mono); font-size:0.75rem; color:var(--text-dim); padding:14px 4px;}
+
+  .ledger{border-top:1px solid var(--rule);}
+  .ledger-row{
+    display:flex; align-items:center; gap:10px; padding:9px 2px; border-bottom:1px solid var(--rule);
+    cursor:pointer;
+  }
+  .ledger-row:active{background:var(--paper-dim);}
+  .lr-check{
+    flex:0 0 auto; width:17px; height:17px; border:1.5px solid var(--text-dim); border-radius:3px;
+    display:flex; align-items:center; justify-content:center; font-size:11px; color:var(--moss);
+  }
+  .lr-check.done{background:var(--moss); border-color:var(--moss); color:var(--text-inv);}
+  .lr-body{flex:1; min-width:0;}
+  .lr-title{font-size:0.88rem; line-height:1.3;}
+  .lr-title.done{text-decoration:line-through; color:var(--text-dim);}
+  .lr-crumb{font-family:var(--mono); font-size:0.62rem; color:var(--text-dim); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .lr-right{display:flex; align-items:center; gap:6px; flex:0 0 auto;}
+  .lr-date{font-family:var(--mono); font-size:0.66rem; color:var(--text-dim);}
+  .lr-date.overdue{color:var(--rust); font-weight:700;}
+
+  .chip{
+    font-family:var(--mono); font-size:0.62rem; letter-spacing:0.02em; padding:2px 7px;
+    border-radius:10px; white-space:nowrap; text-transform:lowercase;
+  }
+  .chip.ctx{background:var(--slate-dim); color:var(--slate);}
+  .chip.pri-high{background:var(--rust-dim); color:var(--rust);}
+  .chip.pri-med{background:var(--amber-dim); color:var(--amber);}
+  .chip.pri-low{background:var(--paper-dim-2); color:var(--text-dim);}
+  .chip.status-inprogress{background:var(--slate-dim); color:var(--slate);}
+  .chip.status-done{background:var(--moss-dim); color:var(--moss);}
+  .chip.repeat{background:var(--paper-dim-2); color:var(--text-dim);}
+
+  .tree-toolbar{display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:8px;}
+  .btn{
+    background:var(--ink); color:var(--text-inv); border:none; border-radius:6px;
+    padding:8px 13px; font-family:var(--mono); font-size:0.72rem; letter-spacing:0.03em;
+    text-transform:uppercase; cursor:pointer;
+  }
+  .btn.secondary{background:transparent; color:var(--ink); border:1px solid var(--rule);}
+  .btn.danger{background:var(--rust); color:var(--text-inv);}
+  .btn:active{opacity:0.8;}
+  .btn.small{padding:5px 9px; font-size:0.64rem;}
+  .btn:disabled{opacity:0.5; cursor:default;}
+
+  .tree{margin-top:4px;}
+  .node{border-left:2px solid transparent;}
+  .node-row{
+    display:flex; align-items:center; gap:7px; padding:8px 4px; border-bottom:1px solid var(--rule);
+    cursor:pointer;
+  }
+  .node-row:active{background:var(--paper-dim);}
+  .node-children{margin-left:16px; border-left:1px dashed var(--rule); padding-left:0;}
+  .toggle-caret{
+    flex:0 0 auto; width:16px; text-align:center; font-family:var(--mono); font-size:0.75rem;
+    color:var(--text-dim); user-select:none;
+  }
+  .ctrl-num{flex:0 0 auto; font-family:var(--mono); font-size:0.66rem; color:var(--amber); min-width:34px;}
+  .node-check{
+    flex:0 0 auto; width:16px; height:16px; border:1.5px solid var(--text-dim); border-radius:3px;
+    display:flex; align-items:center; justify-content:center; font-size:10px; color:var(--moss);
+  }
+  .node-check.done{background:var(--moss); border-color:var(--moss); color:var(--text-inv);}
+  .node-main{flex:1; min-width:0;}
+  .node-title{font-size:0.9rem; line-height:1.3;}
+  .node-title.done{text-decoration:line-through; color:var(--text-dim);}
+  .node-title.lvl1{font-family:var(--serif); font-weight:700; font-size:1rem;}
+  .node-sub{display:flex; gap:5px; flex-wrap:wrap; margin-top:3px;}
+  .node-progress{font-family:var(--mono); font-size:0.62rem; color:var(--text-dim); flex:0 0 auto;}
+  .add-child-row{
+    margin-left:16px; padding:6px 4px 6px 20px; font-family:var(--mono); font-size:0.68rem;
+    color:var(--text-dim); cursor:pointer; border-bottom:1px solid var(--rule);
+  }
+  .add-child-row:active{color:var(--ink);}
+  .subitem-row{
+    margin-left:32px; display:flex; align-items:center; gap:8px; padding:5px 4px;
+    border-bottom:1px solid var(--rule); font-size:0.82rem;
+  }
+  .subitem-row .lr-check{width:14px; height:14px;}
+  .subitem-row .si-title{flex:1; color:var(--text-dim);}
+  .subitem-row .si-title.done{text-decoration:line-through;}
+
+  .planner-nav{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;}
+  .planner-nav .pn-label{font-family:var(--mono); font-size:0.72rem; text-transform:uppercase; letter-spacing:0.04em; color:var(--text-dim);}
+  .day-block{margin-bottom:6px; border:1px solid var(--rule); border-radius:8px; overflow:hidden; background:var(--paper-dim);}
+  .day-head{
+    display:flex; justify-content:space-between; padding:8px 11px; font-family:var(--mono);
+    font-size:0.7rem; text-transform:uppercase; letter-spacing:0.05em; background:var(--paper-dim-2);
+  }
+  .day-head.today{color:var(--rust);}
+  .day-body{padding:2px 8px;}
+  .day-empty{padding:9px 3px; font-family:var(--mono); font-size:0.66rem; color:var(--text-dim);}
+
+  .ctx-group-title{
+    font-family:var(--mono); font-size:0.72rem; text-transform:lowercase; letter-spacing:0.03em;
+    color:var(--slate); background:var(--slate-dim); display:inline-block; padding:3px 9px;
+    border-radius:10px; margin:18px 0 4px 0;
+  }
+
+  .overlay{
+    position:fixed; inset:0; background:rgba(20,17,10,0.45); z-index:100;
+    display:none; align-items:flex-end; justify-content:center;
+  }
+  .overlay.open{display:flex;}
+  .sheet{
+    background:var(--paper); width:100%; max-width:520px; max-height:88vh; overflow-y:auto;
+    border-radius:14px 14px 0 0; padding:16px 16px 22px 16px; box-shadow:0 -4px 20px rgba(0,0,0,0.2);
+  }
+  @media (min-width:640px){ .overlay{align-items:center;} .sheet{border-radius:12px; max-height:82vh;} }
+  .sheet-handle{width:36px; height:4px; background:var(--rule); border-radius:2px; margin:0 auto 14px auto;}
+  .sheet h3{font-family:var(--serif); margin:0 0 3px 0; font-size:1.1rem;}
+  .sheet .lvl-tag{font-family:var(--mono); font-size:0.65rem; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:14px;}
+  .field{margin-bottom:13px;}
+  .field label{display:block; font-family:var(--mono); font-size:0.65rem; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-dim); margin-bottom:5px;}
+  .field input[type=text], .field input[type=date], .field textarea, .field select{
+    width:100%; font-family:var(--sans); font-size:0.9rem; padding:9px 10px; border:1px solid var(--rule);
+    border-radius:6px; background:#fff; color:var(--text);
+  }
+  .field textarea{min-height:64px; resize:vertical; font-family:var(--sans);}
+  .segmented{display:flex; gap:6px; flex-wrap:wrap;}
+  .seg-btn{
+    flex:1 1 auto; text-align:center; padding:8px 6px; border:1px solid var(--rule); border-radius:6px;
+    font-family:var(--mono); font-size:0.68rem; text-transform:uppercase; cursor:pointer; background:#fff;
+    color:var(--text-dim);
+  }
+  .seg-btn.sel-todo.selected{background:var(--paper-dim-2); color:var(--text); border-color:var(--text-dim);}
+  .seg-btn.sel-inprogress.selected{background:var(--slate-dim); color:var(--slate); border-color:var(--slate);}
+  .seg-btn.sel-done.selected{background:var(--moss-dim); color:var(--moss); border-color:var(--moss);}
+  .seg-btn.sel-low.selected{background:var(--paper-dim-2); color:var(--text); border-color:var(--text-dim);}
+  .seg-btn.sel-med.selected{background:var(--amber-dim); color:var(--amber); border-color:var(--amber);}
+  .seg-btn.sel-high.selected{background:var(--rust-dim); color:var(--rust); border-color:var(--rust);}
+  .chip-select{display:flex; gap:6px; flex-wrap:wrap;}
+  .chip-opt{
+    font-family:var(--mono); font-size:0.68rem; padding:6px 11px; border-radius:12px; border:1px solid var(--rule);
+    background:#fff; cursor:pointer; color:var(--text-dim);
+  }
+  .chip-opt.selected{background:var(--slate-dim); color:var(--slate); border-color:var(--slate);}
+  .rec-row{display:flex; align-items:center; gap:8px;}
+  .rec-row select, .rec-row input{width:auto; flex:1;}
+  .switch{
+    position:relative; width:38px; height:22px; background:var(--paper-dim-2); border-radius:11px;
+    flex:0 0 auto; cursor:pointer; border:1px solid var(--rule);
+  }
+  .switch.on{background:var(--moss);}
+  .switch .knob{position:absolute; top:2px; left:2px; width:16px; height:16px; background:#fff; border-radius:50%; transition:left .12s;}
+  .switch.on .knob{left:18px;}
+  .sheet-actions{display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;}
+  .sheet-actions .btn{flex:1 1 auto;}
+
+  .subitem-editor-row{display:flex; align-items:center; gap:7px; margin-bottom:6px;}
+  .subitem-editor-row input[type=text]{flex:1;}
+  .subitem-editor-row .si-del{
+    flex:0 0 auto; background:transparent; border:1px solid var(--rule); border-radius:6px;
+    color:var(--rust); font-family:var(--mono); font-size:0.72rem; padding:6px 9px; cursor:pointer;
+  }
+
+  .fab{
+    position:fixed; right:18px; bottom:18px; width:54px; height:54px; border-radius:50%;
+    background:var(--amber); color:var(--ink); border:none; font-size:1.6rem; line-height:1;
+    box-shadow:0 3px 10px rgba(0,0,0,0.25); cursor:pointer; z-index:50;
+  }
+  .fab:active{transform:scale(0.95);}
+  .fab:disabled{opacity:0.4;}
+
+  .toast{
+    position:fixed; left:50%; bottom:88px; transform:translateX(-50%); background:var(--ink);
+    color:var(--text-inv); font-family:var(--mono); font-size:0.72rem; padding:9px 16px; border-radius:20px;
+    z-index:200; opacity:0; pointer-events:none; transition:opacity .2s;
+  }
+  .toast.show{opacity:1;}
+
+  textarea.export-box{
+    width:100%; min-height:220px; font-family:var(--mono); font-size:0.72rem; padding:10px;
+    border:1px solid var(--rule); border-radius:6px; background:#fff; color:var(--text);
+  }
+
+  /* ---------- Setup / connect screens ---------- */
+  .gate-wrap{max-width:520px; margin:40px auto; padding:0 16px;}
+  .gate-card{
+    background:var(--paper-dim); border:1px solid var(--rule); border-radius:10px; padding:22px 20px;
+  }
+  .gate-card h2{font-family:var(--serif); margin:0 0 8px 0; font-size:1.25rem;}
+  .gate-card p{font-size:0.88rem; line-height:1.55; color:var(--text-dim); margin:0 0 14px 0;}
+  .gate-card ol{font-size:0.85rem; line-height:1.7; color:var(--text); padding-left:20px; margin:0 0 16px 0;}
+  .gate-card ol code{background:var(--paper-dim-2); padding:1px 5px; border-radius:4px; font-family:var(--mono); font-size:0.8rem;}
+  .gate-card a{color:var(--slate);}
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <div class="brand-row">
+    <div class="brand">Ledger<small>Google Tasks edition</small></div>
+    <div class="header-actions">
+      <span class="save-indicator" id="saveIndicator" title="Sync status"></span>
+      <button class="icon-btn" id="refreshBtn" style="display:none;">Refresh</button>
+      <button class="icon-btn" id="exportBtn" style="display:none;">Export</button>
+      <button class="icon-btn" id="disconnectBtn" style="display:none;">Disconnect</button>
+    </div>
+  </div>
+  <nav class="tabs" id="mainTabs" style="display:none;">
+    <button data-view="dashboard" class="active">Dashboard</button>
+    <button data-view="tree">Projects</button>
+    <button data-view="planner">Planner</button>
+    <button data-view="context">By Context</button>
+  </nav>
+</header>
+
+<!-- SETUP GATE: shown until a Client ID is saved -->
+<div class="gate-wrap" id="setupGate">
+  <div class="gate-card">
+    <h2>Connect your Google account</h2>
+    <p>This page talks directly to the real Google Tasks API from your browser &mdash; there's no server in between, so it works the same on desktop and mobile. Google requires a one-time free setup so the page can ask for permission:</p>
+    <ol>
+      <li>Go to <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener">console.cloud.google.com/apis/credentials</a> (free Google account is enough, no billing needed).</li>
+      <li>Create a project if you don't have one, then click <strong>Create Credentials &rarr; OAuth client ID</strong>.</li>
+      <li>Application type: <strong>Web application</strong>.</li>
+      <li>Under <strong>Authorized JavaScript origins</strong>, add exactly: <code>https://oscar-metcalfe.github.io</code></li>
+      <li>You'll also need to enable the <strong>Google Tasks API</strong> for that project, and add your own Google account as a <strong>test user</strong> on the OAuth consent screen (since this is just for you, it doesn't need Google's review).</li>
+      <li>Copy the generated <strong>Client ID</strong> and paste it below.</li>
+    </ol>
+    <div class="field">
+      <label>Google OAuth Client ID</label>
+      <input type="text" id="clientIdInput" placeholder="1234567890-abc...apps.googleusercontent.com">
+    </div>
+    <button class="btn" id="saveClientIdBtn">Continue</button>
+  </div>
+</div>
+
+<!-- CONNECT GATE: shown once Client ID is set but not yet signed in -->
+<div class="gate-wrap" id="connectGate" style="display:none;">
+  <div class="gate-card">
+    <h2>Sign in to Google Tasks</h2>
+    <p>Your tasks, projects, and subtasks will be read from and written to your real Google Tasks account. Nothing is stored on this page or on any server.</p>
+    <button class="btn" id="signInBtn">Connect Google Tasks</button>
+    <button class="btn secondary" id="changeClientIdBtn" style="margin-left:8px;">Change Client ID</button>
+  </div>
+</div>
+
+<main id="mainContent" style="display:none;">
+
+  <div id="loadBanner" class="load-banner" style="display:none;"></div>
+
+  <section class="view active" id="view-dashboard">
+    <h2 class="section-title">Quick add<span class="rule"></span></h2>
+    <div class="quick-add">
+      <select id="qaProject"></select>
+      <input type="text" id="qaTitle" placeholder="New task title&#8230;">
+      <button id="qaBtn">Add</button>
+    </div>
+
+    <h2 class="section-title">Due today &amp; this week<span class="rule"></span></h2>
+    <div class="ledger" id="dueList"></div>
+
+    <h2 class="section-title">Projects<span class="rule"></span></h2>
+    <div class="card-grid" id="projectCards"></div>
+  </section>
+
+  <section class="view" id="view-tree">
+    <div class="tree-toolbar">
+      <span class="empty-hint" style="padding:0;">Tap a row to open it.</span>
+      <button class="btn" id="newProjectBtn">+ Project</button>
+    </div>
+    <div class="tree" id="treeRoot"></div>
+  </section>
+
+  <section class="view" id="view-planner">
+    <div class="planner-nav">
+      <button class="btn secondary small" id="prevWeekBtn">&#8592; Prev</button>
+      <span class="pn-label" id="weekLabel"></span>
+      <button class="btn secondary small" id="nextWeekBtn">Next &#8594;</button>
+    </div>
+    <div id="weekDays"></div>
+    <h2 class="section-title">Unscheduled<span class="rule"></span></h2>
+    <div class="ledger" id="unscheduledList"></div>
+  </section>
+
+  <section class="view" id="view-context">
+    <div id="contextGroups"></div>
+  </section>
+
+</main>
+
+<button class="fab" id="fabAdd" title="New project" style="display:none;">+</button>
+
+<div class="overlay" id="editOverlay">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h3 id="editHeading">Edit item</h3>
+    <div class="lvl-tag" id="editLevelTag"></div>
+
+    <div class="field">
+      <label>Title</label>
+      <input type="text" id="fTitle" placeholder="What needs doing?">
+    </div>
+
+    <div class="field">
+      <label>Status</label>
+      <div class="segmented">
+        <div class="seg-btn sel-todo" data-status="todo">To do</div>
+        <div class="seg-btn sel-inprogress" data-status="inprogress">In progress</div>
+        <div class="seg-btn sel-done" data-status="done">Done</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Priority</label>
+      <div class="segmented">
+        <div class="seg-btn sel-low" data-priority="low">Low</div>
+        <div class="seg-btn sel-med" data-priority="med">Medium</div>
+        <div class="seg-btn sel-high" data-priority="high">High</div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Due date</label>
+      <input type="date" id="fDue">
+    </div>
+
+    <div class="field">
+      <label>Context tag</label>
+      <div class="chip-select" id="fContextChips"></div>
+      <input type="text" id="fContextCustom" placeholder="Add custom tag, then press Enter" style="margin-top:7px;">
+    </div>
+
+    <div class="field">
+      <label>Recurring</label>
+      <div class="rec-row">
+        <div class="switch" id="fRecurSwitch"><div class="knob"></div></div>
+        <span id="fRecurSummary" style="font-family:var(--mono); font-size:0.72rem; color:var(--text-dim);">Off</span>
+      </div>
+      <div id="fRecurOptions" style="display:none; margin-top:9px;">
+        <div class="rec-row">
+          <select id="fRecurFreq">
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+            <option value="custom">Every N days</option>
+          </select>
+          <input type="number" id="fRecurN" min="1" value="2" style="display:none;">
+        </div>
+      </div>
+    </div>
+
+    <div class="field" id="fSubitemsField" style="display:none;">
+      <label>Checklist (this level doesn't support due dates or tags &mdash; just a checklist)</label>
+      <div id="subitemsEditor"></div>
+      <button class="btn secondary small" id="addSubitemBtn" type="button">+ Add checklist row</button>
+    </div>
+
+    <div class="field">
+      <label>Notes</label>
+      <textarea id="fNotes" placeholder="Details, links, context&#8230;"></textarea>
+    </div>
+
+    <div class="sheet-actions">
+      <button class="btn secondary" id="cancelEditBtn">Cancel</button>
+      <button class="btn danger" id="deleteNodeBtn">Delete</button>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn secondary" id="addChildBtn">+ Add sub-item</button>
+      <button class="btn" id="saveNodeBtn">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="exportOverlay">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h3>Export</h3>
+    <div class="lvl-tag">Select all &amp; copy, or use the button below</div>
+    <textarea class="export-box" id="exportText" readonly></textarea>
+    <div class="sheet-actions">
+      <button class="btn secondary" id="closeExportBtn">Close</button>
+      <button class="btn" id="copyExportBtn">Copy to clipboard</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="confirmOverlay">
+  <div class="sheet" style="max-width:380px;">
+    <div class="sheet-handle"></div>
+    <h3 id="confirmMessage">Are you sure?</h3>
+    <div class="sheet-actions">
+      <button class="btn secondary" id="confirmCancelBtn">Cancel</button>
+      <button class="btn danger" id="confirmOkBtn">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  var SCOPES = "https://www.googleapis.com/auth/tasks";
+  var LS_CLIENT_ID = "gt-tracker-client-id";
+  var LS_EVER_AUTHED = "gt-tracker-ever-authed";
+  var API_BASE = "https://tasks.googleapis.com/tasks/v1";
+  var DEFAULT_CONTEXTS = ["errands","home","computer","calls","waiting-for"];
+  var META_MARK = "\u00a7meta", SUB_MARK = "\u00a7subtasks", NOTES_MARK = "\u00a7notes";
+
+  var state = {
+    clientId: localStorage.getItem(LS_CLIENT_ID) || "",
+    lists: [],          // array of level-1 nodes: {id, level:1, title, children:[level2...]}
+    contextTags: DEFAULT_CONTEXTS.slice(),
+    expanded: {}
+  };
+
+  var tokenClient = null;
+  var accessToken = null;
+  var tokenExpiryMs = 0;
+
+  var editingNodeId = null, editingParentId = null, editingIsNew = false, editingLevel = 2;
+  var currentEditRec = null;
+  var currentSubitems = [];
+  var weekOffset = 0;
+
+  // ---------------- Utilities ----------------
+  function uid(){ return "s" + Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+  function todayISO(){ return isoFromDate(new Date()); }
+  function isoFromDate(d){ var y=d.getFullYear(), m=("0"+(d.getMonth()+1)).slice(-2), day=("0"+d.getDate()).slice(-2); return y+"-"+m+"-"+day; }
+  function parseISO(s){ if(!s) return null; var p=s.split("-"); return new Date(parseInt(p[0],10), parseInt(p[1],10)-1, parseInt(p[2],10)); }
+  function fmtDate(s){ if(!s) return ""; var d=parseISO(s); var months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return months[d.getMonth()]+" "+d.getDate(); }
+  function fmtDay(d){ var days=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]; var months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return days[d.getDay()]+" "+months[d.getMonth()]+" "+d.getDate(); }
+  function addDays(d,n){ var r=new Date(d); r.setDate(r.getDate()+n); return r; }
+  function startOfWeek(d){ var r=new Date(d); var day=r.getDay(); var diff=(day===0?-6:1-day); return addDays(r,diff); }
+  function levelName(l){ return l===1?"Project": l===2?"Task":"Subtask"; }
+
+  function findNode(id, nodes){
+    nodes = nodes || state.lists;
+    for(var i=0;i<nodes.length;i++){
+      if(nodes[i].id === id) return {node: nodes[i], parentArr: nodes};
+      if(nodes[i].children && nodes[i].children.length){
+        var res = findNode(id, nodes[i].children);
+        if(res) return res;
+      }
+    }
+    return null;
+  }
+
+  function rollup(node){
+    if(!node.children || node.children.length===0){ return {done: node.status==="done"?1:0, total:1}; }
+    var done=0,total=0;
+    node.children.forEach(function(c){ var r=rollup(c); done+=r.done; total+=r.total; });
+    return {done:done, total:total};
+  }
+
+  function controlNumbers(nodes, prefix){
+    var out=[];
+    nodes.forEach(function(n,i){
+      var num = prefix ? (prefix+"."+(i+1)) : String(i+1);
+      out.push({node:n, num:num});
+      if(n.children && n.children.length) out = out.concat(controlNumbers(n.children, num));
+    });
+    return out;
+  }
+
+  function flattenAll(){
+    var result=[];
+    function walk(nodes, prefix, crumb, path){
+      nodes.forEach(function(n,i){
+        var num = prefix ? prefix+"."+(i+1) : String(i+1);
+        var newCrumb = crumb.concat([n.title]);
+        var newPath = path.concat([n]);
+        result.push({node:n, num:num, crumb:newCrumb, path:newPath});
+        if(n.children && n.children.length) walk(n.children, num, newCrumb, newPath);
+      });
+    }
+    walk(state.lists, "", [], []);
+    return result;
+  }
+  function crumbStr(entry){ return entry.crumb.slice(0,-1).join(" \u203a "); }
+
+  function recurSummary(rec){
+    if(!rec) return "Off";
+    if(rec.freq==="daily") return "\u21bb Daily";
+    if(rec.freq==="weekly") return "\u21bb Weekly";
+    if(rec.freq==="monthly") return "\u21bb Monthly";
+    if(rec.freq==="custom") return "\u21bb Every "+(rec.n||1)+" days";
+    return "Off";
+  }
+  function nextDueDate(dueISO, rec){
+    var d = dueISO ? parseISO(dueISO) : new Date();
+    if(rec.freq==="daily") d=addDays(d,1);
+    else if(rec.freq==="weekly") d=addDays(d,7);
+    else if(rec.freq==="monthly"){ var r=new Date(d); r.setMonth(r.getMonth()+1); d=r; }
+    else if(rec.freq==="custom") d=addDays(d, rec.n||1);
+    return isoFromDate(d);
+  }
+
+  // ---------------- Notes encode/decode ----------------
+  function encodeMeta(node){
+    var lines=[];
+    var metaParts=[];
+    if(node.priority && node.priority!=="med") metaParts.push("priority="+node.priority);
+    if(node.context) metaParts.push("context="+node.context);
+    if(node.recurrence) metaParts.push("recur="+node.recurrence.freq+(node.recurrence.freq==="custom" ? (":"+(node.recurrence.n||1)) : ""));
+    if(metaParts.length) lines.push(META_MARK+" "+metaParts.join(" "));
+    if(node.level===3 && node.subitems && node.subitems.length){
+      lines.push(SUB_MARK);
+      node.subitems.forEach(function(si){ lines.push("- ["+(si.done?"x":" ")+"] "+si.title); });
+    }
+    if(node.notesFree){ lines.push(NOTES_MARK); lines.push(node.notesFree); }
+    return lines.join("\n");
+  }
+
+  function decodeMeta(rawNotes){
+    var result = {priority:"med", context:null, recurrence:null, subitems:[], notesFree:""};
+    if(!rawNotes) return result;
+    var lines = rawNotes.split("\n");
+    var section = null;
+    var freeLines = [];
+    lines.forEach(function(line){
+      if(line.indexOf(META_MARK)===0){
+        section="meta";
+        var parts = line.slice(META_MARK.length).trim().split(/\s+/).filter(Boolean);
+        parts.forEach(function(p){
+          var kv = p.split("=");
+          if(kv[0]==="priority") result.priority = kv[1];
+          else if(kv[0]==="context") result.context = kv[1];
+          else if(kv[0]==="recur"){
+            var rp = kv[1].split(":");
+            result.recurrence = {freq: rp[0], n: rp[1] ? parseInt(rp[1],10) : 1};
+          }
+        });
+        return;
+      }
+      if(line.indexOf(SUB_MARK)===0){ section="subtasks"; return; }
+      if(line.indexOf(NOTES_MARK)===0){ section="notes"; return; }
+      if(section==="subtasks"){
+        var m = line.match(/^- \[( |x)\] (.*)$/);
+        if(m){ result.subitems.push({id:uid(), title:m[2], done: m[1]==="x"}); }
+        return;
+      }
+      if(section==="notes"){ freeLines.push(line); return; }
+      if(!section){ freeLines.push(line); }
+    });
+    result.notesFree = freeLines.join("\n").replace(/^\n+|\n+$/g,"");
+    return result;
+  }
+
+  // ---------------- Auth ----------------
+  function waitForGis(){
+    return new Promise(function(resolve, reject){
+      var tries=0;
+      (function poll(){
+        if(window.__gisLoaded && window.google && google.accounts && google.accounts.oauth2){ resolve(); return; }
+        tries++;
+        if(tries>100){ reject(new Error("Google sign-in script did not load")); return; }
+        setTimeout(poll, 100);
+      })();
+    });
+  }
+
+  function initTokenClient(){
+    return waitForGis().then(function(){
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: state.clientId,
+        scope: SCOPES,
+        callback: function(){}
+      });
+    });
+  }
+
+  function ensureToken(){
+    return new Promise(function(resolve, reject){
+      if(accessToken && Date.now() < tokenExpiryMs - 60000){ resolve(accessToken); return; }
+      if(!tokenClient){ reject(new Error("Not signed in")); return; }
+      tokenClient.callback = function(resp){
+        if(resp && resp.error){ reject(new Error(resp.error)); return; }
+        accessToken = resp.access_token;
+        tokenExpiryMs = Date.now() + (resp.expires_in*1000);
+        localStorage.setItem(LS_EVER_AUTHED, "1");
+        resolve(accessToken);
+      };
+      var everAuthed = localStorage.getItem(LS_EVER_AUTHED) === "1";
+      tokenClient.requestAccessToken({prompt: everAuthed ? "" : "consent"});
+    });
+  }
+
+  function apiFetch(path, opts, isRetry){
+    opts = opts || {};
+    return ensureToken().then(function(token){
+      return fetch(API_BASE+path, Object.assign({}, opts, {
+        headers: Object.assign({"Authorization":"Bearer "+token, "Content-Type":"application/json"}, opts.headers||{})
+      }));
+    }).then(function(res){
+      if(res.status===401 && !isRetry){ accessToken=null; return apiFetch(path, opts, true); }
+      if(!res.ok){ return res.text().then(function(t){ throw new Error("Google Tasks API "+res.status+": "+t); }); }
+      if(res.status===204) return null;
+      var ct = res.headers.get("content-type")||"";
+      if(ct.indexOf("application/json")===-1) return null;
+      return res.json();
+    });
+  }
+
+  function fetchTaskLists(){ return apiFetch("/users/@me/lists?maxResults=100").then(function(r){ return r.items||[]; }); }
+  function fetchTasks(listId){ return apiFetch("/lists/"+encodeURIComponent(listId)+"/tasks?showCompleted=true&showHidden=true&maxResults=200").then(function(r){ return r.items||[]; }); }
+  function insertTask(listId, body, parentId){
+    var qs = parentId ? ("?parent="+encodeURIComponent(parentId)) : "";
+    return apiFetch("/lists/"+encodeURIComponent(listId)+"/tasks"+qs, {method:"POST", body:JSON.stringify(body)});
+  }
+  function patchTask(listId, taskId, body){
+    return apiFetch("/lists/"+encodeURIComponent(listId)+"/tasks/"+encodeURIComponent(taskId), {method:"PATCH", body:JSON.stringify(body)});
+  }
+  function deleteTaskApi(listId, taskId){
+    return apiFetch("/lists/"+encodeURIComponent(listId)+"/tasks/"+encodeURIComponent(taskId), {method:"DELETE"});
+  }
+  function insertTaskList(title){ return apiFetch("/users/@me/lists", {method:"POST", body:JSON.stringify({title:title})}); }
+  function deleteTaskListApi(listId){ return apiFetch("/users/@me/lists/"+encodeURIComponent(listId), {method:"DELETE"}); }
+
+  // ---------------- Build tree from raw API data ----------------
+  function buildListNode(list, rawTasks){
+    var byId = {};
+    rawTasks.forEach(function(t){
+      var decoded = decodeMeta(t.notes);
+      byId[t.id] = {
+        id:t.id, listId:list.id, parentId:t.parent||null,
+        title:t.title||"(untitled)",
+        status: t.status==="completed" ? "done":"todo",
+        priority: decoded.priority, context: decoded.context, recurrence: decoded.recurrence,
+        subitems: decoded.subitems, notesFree: decoded.notesFree,
+        dueDate: t.due ? t.due.slice(0,10) : null,
+        position: t.position || "",
+        level: t.parent ? 3 : 2,
+        children: []
+      };
+    });
+    var roots = [];
+    Object.keys(byId).forEach(function(id){
+      var n = byId[id];
+      if(n.parentId && byId[n.parentId]){ byId[n.parentId].children.push(n); }
+      else { n.level=2; n.parentId=null; roots.push(n); }
+    });
+    function sortRec(arr){ arr.sort(function(a,b){ return a.position < b.position ? -1:1; }); arr.forEach(function(n){ sortRec(n.children); }); }
+    sortRec(roots);
+    return {id:list.id, level:1, title:list.title, children:roots};
+  }
+
+  function loadAll(){
+    loadState = "loading";
+    return fetchTaskLists().then(function(lists){
+      return Promise.all(lists.map(function(l){
+        return fetchTasks(l.id).then(function(tasks){ return buildListNode(l, tasks); });
+      }));
+    }).then(function(built){
+      state.lists = built;
+      loadState = "ok";
+    }).catch(function(err){
+      console.warn("load failed:", err && err.message ? err.message : err);
+      loadState = "error";
+    });
+  }
+
+  var loadState = "loading";
+
+  // ---------------- Save-status indicator ----------------
+  var saveState = "idle";
+  var saveIndicatorTimer = null;
+  function updateSaveIndicator(){
+    var el = document.getElementById("saveIndicator");
+    el.className = "save-indicator " + saveState;
+    if(saveState==="saving") el.textContent = "Syncing\u2026";
+    else if(saveState==="saved") el.textContent = "Synced";
+    else if(saveState==="error") el.textContent = "Sync failed \u00b7 tap to retry";
+    else el.textContent = "";
+  }
+  var lastFailedAction = null;
+  function runSync(promiseFactory){
+    saveState = "saving"; updateSaveIndicator();
+    return promiseFactory().then(function(res){
+      saveState = "saved"; updateSaveIndicator();
+      clearTimeout(saveIndicatorTimer);
+      saveIndicatorTimer = setTimeout(function(){ saveState="idle"; updateSaveIndicator(); }, 2200);
+      return res;
+    }).catch(function(err){
+      console.warn("sync failed:", err && err.message ? err.message : err);
+      saveState = "error"; updateSaveIndicator();
+      lastFailedAction = promiseFactory;
+      showToast("Couldn't reach Google Tasks. Tap \"Sync failed\" above to retry.");
+      throw err;
+    });
+  }
+  document.getElementById("saveIndicator").addEventListener("click", function(){
+    if(saveState==="error" && lastFailedAction){ runSync(lastFailedAction).then(function(){ reloadAndRender(); }); }
+  });
+
+  function reloadAndRender(){ return loadAll().then(function(){ renderLoadBanner(); renderAll(); }); }
+
+  // ---------------- Recurrence toggle ----------------
+  function toggleStatus(nodeId){
+    var found = findNode(nodeId);
+    if(!found) return;
+    var node = found.node;
+    if(node.level===1) return;
+    if(node.status === "done"){
+      runSync(function(){ return patchTask(node.listId, node.id, {status:"needsAction"}); }).then(function(){
+        node.status = "todo"; renderAll();
+      }).catch(function(){});
+      return;
+    }
+    if(node.recurrence){
+      var nextDue = nextDueDate(node.dueDate, node.recurrence);
+      runSync(function(){
+        return patchTask(node.listId, node.id, {status:"needsAction", due: nextDue+"T00:00:00.000Z"});
+      }).then(function(){
+        node.dueDate = nextDue; node.status = "todo";
+        showToast("Recurring \u2014 next due " + fmtDate(nextDue));
+        renderAll();
+      }).catch(function(){});
+    } else {
+      runSync(function(){ return patchTask(node.listId, node.id, {status:"completed"}); }).then(function(){
+        node.status = "done"; renderAll();
+      }).catch(function(){});
+    }
+  }
+
+  function toggleSubitem(parentId, subId){
+    var found = findNode(parentId);
+    if(!found) return;
+    var node = found.node;
+    var si = node.subitems.filter(function(s){ return s.id===subId; })[0];
+    if(!si) return;
+    si.done = !si.done;
+    runSync(function(){ return patchTask(node.listId, node.id, {notes: encodeMeta(node)}); }).then(function(){
+      renderAll();
+    }).catch(function(){ si.done = !si.done; renderAll(); });
+  }
+
+  // ---------------- Rendering: Dashboard ----------------
+  function renderQuickAddOptions(){
+    var sel = document.getElementById("qaProject");
+    sel.innerHTML = "";
+    if(state.lists.length===0){
+      var opt = document.createElement("option"); opt.textContent="No projects yet"; opt.disabled=true; sel.appendChild(opt); return;
+    }
+    state.lists.forEach(function(p){
+      var opt = document.createElement("option"); opt.value=p.id; opt.textContent=p.title; sel.appendChild(opt);
+    });
+  }
+
+  function renderProjectCards(){
+    var wrap = document.getElementById("projectCards");
+    wrap.innerHTML = "";
+    if(state.lists.length===0){ wrap.innerHTML = '<div class="empty-hint">No projects yet. Tap the + button to add one.</div>'; return; }
+    state.lists.forEach(function(p){
+      var r = rollup(p);
+      var pct = r.total ? Math.round((r.done/r.total)*100) : 0;
+      var flat = flattenAll().filter(function(e){ return e.path[0].id===p.id && e.node.dueDate && e.node.status!=="done"; });
+      flat.sort(function(a,b){ return a.node.dueDate < b.node.dueDate ? -1:1; });
+      var nextDue = flat.length ? fmtDate(flat[0].node.dueDate) : "\u2014";
+      var card = document.createElement("div");
+      card.className = "proj-card";
+      card.innerHTML = '<div class="pc-top"><div class="pc-title"></div><div class="pc-count">'+r.done+"/"+r.total+'</div></div>'+
+        '<div class="pc-bar"><div class="pc-bar-fill" style="width:'+pct+'%"></div></div>'+
+        '<div class="pc-meta">Next due: '+nextDue+"</div>";
+      card.querySelector(".pc-title").textContent = p.title;
+      card.addEventListener("click", function(){
+        switchView("tree"); state.expanded[p.id]=true; renderTree(); scrollToNode(p.id);
+      });
+      wrap.appendChild(card);
+    });
+  }
+
+  function renderDueList(){
+    var wrap = document.getElementById("dueList");
+    wrap.innerHTML = "";
+    var wkEnd = isoFromDate(addDays(new Date(),7));
+    var items = flattenAll().filter(function(e){ return e.node.dueDate && e.node.status!=="done" && e.node.dueDate<=wkEnd; });
+    items.sort(function(a,b){ return a.node.dueDate < b.node.dueDate ? -1:1; });
+    if(items.length===0){ wrap.innerHTML = '<div class="empty-hint">Nothing due in the next 7 days.</div>'; return; }
+    items.forEach(function(e){ wrap.appendChild(buildLedgerRow(e)); });
+  }
+
+  function buildLedgerRow(entry){
+    var node = entry.node;
+    var row = document.createElement("div");
+    row.className = "ledger-row";
+    var overdue = node.dueDate && node.dueDate < todayISO();
+    var check = document.createElement("div");
+    check.className = "lr-check" + (node.status==="done" ? " done":"");
+    check.textContent = node.status==="done" ? "\u2713" : "";
+    check.addEventListener("click", function(ev){ ev.stopPropagation(); toggleStatus(node.id); });
+    var body = document.createElement("div");
+    body.className = "lr-body";
+    var title = document.createElement("div");
+    title.className = "lr-title" + (node.status==="done" ? " done":"");
+    title.textContent = node.title;
+    var crumb = document.createElement("div");
+    crumb.className = "lr-crumb"; crumb.textContent = crumbStr(entry) || levelName(node.level);
+    body.appendChild(title); body.appendChild(crumb);
+    var right = document.createElement("div");
+    right.className = "lr-right";
+    if(node.context){ var chip=document.createElement("span"); chip.className="chip ctx"; chip.textContent="@"+node.context; right.appendChild(chip); }
+    if(node.dueDate){ var d=document.createElement("span"); d.className="lr-date"+(overdue?" overdue":""); d.textContent=fmtDate(node.dueDate); right.appendChild(d); }
+    row.appendChild(check); row.appendChild(body); row.appendChild(right);
+    row.addEventListener("click", function(){ openEditSheet(node.id); });
+    return row;
+  }
+
+  // ---------------- Rendering: Tree ----------------
+  function renderTree(){
+    var root = document.getElementById("treeRoot");
+    root.innerHTML = "";
+    if(state.lists.length===0){ root.innerHTML = '<div class="empty-hint">No projects yet. Tap "+ Project" to start.</div>'; return; }
+    var numbered = controlNumbers(state.lists, "");
+    var byId = {}; numbered.forEach(function(e){ byId[e.node.id]=e.num; });
+    state.lists.forEach(function(p){ root.appendChild(buildNodeEl(p, byId[p.id])); });
+  }
+
+  function buildNodeEl(node, num){
+    var wrap = document.createElement("div");
+    wrap.className = "node"; wrap.setAttribute("data-node-id", node.id);
+    var row = document.createElement("div"); row.className = "node-row";
+    var hasChildren = node.children && node.children.length>0;
+    var isExpanded = !!state.expanded[node.id];
+    var caret = document.createElement("div");
+    caret.className = "toggle-caret";
+    caret.textContent = hasChildren ? (isExpanded ? "\u25be" : "\u25b8") : "\u00b7";
+    caret.addEventListener("click", function(ev){ ev.stopPropagation(); if(!hasChildren) return; state.expanded[node.id]=!state.expanded[node.id]; renderTree(); });
+    var ctrl = document.createElement("div"); ctrl.className="ctrl-num"; ctrl.textContent=num;
+    var check = document.createElement("div");
+    check.className = "node-check" + (node.status==="done" ? " done":"");
+    check.textContent = node.status==="done" ? "\u2713" : "";
+    if(node.level>1) check.addEventListener("click", function(ev){ ev.stopPropagation(); toggleStatus(node.id); });
+    else check.style.visibility = "hidden";
+    var mainWrap = document.createElement("div"); mainWrap.className="node-main";
+    var title = document.createElement("div");
+    title.className = "node-title" + (node.level===1 ? " lvl1":"") + (node.status==="done" ? " done":"");
+    title.textContent = node.title;
+    mainWrap.appendChild(title);
+    var sub = document.createElement("div"); sub.className="node-sub";
+    if(node.priority==="high") sub.appendChild(makeChip("High","pri-high"));
+    else if(node.priority==="med" && node.level>1) {}
+    if(node.context) sub.appendChild(makeChip("@"+node.context,"ctx"));
+    if(node.dueDate) sub.appendChild(makeChip(fmtDate(node.dueDate), (node.dueDate<todayISO() && node.status!=="done") ? "pri-high":"repeat"));
+    if(node.recurrence) sub.appendChild(makeChip(recurSummary(node.recurrence),"repeat"));
+    if(node.level===3 && node.subitems && node.subitems.length) sub.appendChild(makeChip(node.subitems.filter(function(s){return s.done;}).length+"/"+node.subitems.length+" checklist","repeat"));
+    if(sub.children.length) mainWrap.appendChild(sub);
+    var progress = document.createElement("div"); progress.className="node-progress";
+    if(hasChildren){ var r=rollup(node); progress.textContent = r.done+"/"+r.total; }
+    row.appendChild(caret); row.appendChild(ctrl); row.appendChild(check); row.appendChild(mainWrap); row.appendChild(progress);
+    row.addEventListener("click", function(){ openEditSheet(node.id); });
+    wrap.appendChild(row);
+
+    if(hasChildren && isExpanded){
+      var childWrap = document.createElement("div"); childWrap.className="node-children";
+      var numbered = controlNumbers(node.children, num);
+      var byId = {}; numbered.forEach(function(e){ byId[e.node.id]=e.num; });
+      node.children.forEach(function(c){ childWrap.appendChild(buildNodeEl(c, byId[c.id])); });
+      wrap.appendChild(childWrap);
+    }
+    // level-3 subitem checklist (not a real API child, just inline rows)
+    if(node.level===3 && isExpanded===undefined){} // no-op guard
+    if(node.level===3 && node.subitems && node.subitems.length){
+      node.subitems.forEach(function(si){
+        var sr = document.createElement("div"); sr.className="subitem-row";
+        var sc = document.createElement("div"); sc.className="lr-check"+(si.done?" done":""); sc.textContent = si.done?"\u2713":"";
+        sc.addEventListener("click", function(ev){ ev.stopPropagation(); toggleSubitem(node.id, si.id); });
+        var st = document.createElement("div"); st.className="si-title"+(si.done?" done":""); st.textContent = si.title;
+        sr.appendChild(sc); sr.appendChild(st);
+        wrap.appendChild(sr);
+      });
+    }
+    if(isExpanded && node.level < 3){
+      var addRow = document.createElement("div"); addRow.className="add-child-row";
+      addRow.textContent = "+ Add " + levelName(node.level+1).toLowerCase();
+      addRow.addEventListener("click", function(ev){ ev.stopPropagation(); openNewChildSheet(node.id); });
+      wrap.appendChild(addRow);
+    } else if(isExpanded && node.level === 3){
+      var addChk = document.createElement("div"); addChk.className="add-child-row";
+      addChk.textContent = "+ Add checklist item";
+      addChk.addEventListener("click", function(ev){ ev.stopPropagation(); openEditSheet(node.id, true); });
+      wrap.appendChild(addChk);
+    }
+    return wrap;
+  }
+
+  function makeChip(text, cls){ var c=document.createElement("span"); c.className="chip "+cls; c.textContent=text; return c; }
+  function scrollToNode(id){ setTimeout(function(){ var el=document.querySelector('[data-node-id="'+id+'"]'); if(el) el.scrollIntoView({behavior:"smooth", block:"start"}); }, 60); }
+
+  // ---------------- Rendering: Planner ----------------
+  function renderPlanner(){
+    var wkStart = addDays(startOfWeek(new Date()), weekOffset*7);
+    var wkEnd = addDays(wkStart,6);
+    document.getElementById("weekLabel").textContent = fmtDate(isoFromDate(wkStart))+" \u2013 "+fmtDate(isoFromDate(wkEnd))+(weekOffset===0?" (this week)":"");
+    var all = flattenAll().filter(function(e){ return e.node.dueDate; });
+    var container = document.getElementById("weekDays"); container.innerHTML="";
+    for(var i=0;i<7;i++){
+      var day = addDays(wkStart,i); var iso = isoFromDate(day);
+      var block = document.createElement("div"); block.className="day-block";
+      var isToday = iso===todayISO();
+      var head = document.createElement("div"); head.className="day-head"+(isToday?" today":"");
+      head.innerHTML = "<span>"+fmtDay(day)+"</span>"+(isToday?"<span>today</span>":"");
+      block.appendChild(head);
+      var body = document.createElement("div"); body.className="day-body";
+      var dayItems = all.filter(function(e){ return e.node.dueDate===iso; });
+      if(dayItems.length===0){ var empty=document.createElement("div"); empty.className="day-empty"; empty.textContent="\u2014"; body.appendChild(empty); }
+      else { dayItems.forEach(function(e){ body.appendChild(buildLedgerRow(e)); }); }
+      block.appendChild(body); container.appendChild(block);
+    }
+    var unschedWrap = document.getElementById("unscheduledList"); unschedWrap.innerHTML="";
+    var unsched = flattenAll().filter(function(e){ return !e.node.dueDate && e.node.status!=="done" && (!e.node.children || e.node.children.length===0) && e.node.level>1; });
+    if(unsched.length===0){ unschedWrap.innerHTML = '<div class="empty-hint">Nothing unscheduled.</div>'; }
+    else { unsched.forEach(function(e){ unschedWrap.appendChild(buildLedgerRow(e)); }); }
+  }
+
+  // ---------------- Rendering: By Context ----------------
+  function renderContextView(){
+    var wrap = document.getElementById("contextGroups"); wrap.innerHTML="";
+    var all = flattenAll().filter(function(e){ return e.node.context; });
+    if(all.length===0){ wrap.innerHTML = '<div class="empty-hint">No context tags assigned yet. Open any item to add one.</div>'; return; }
+    var groups = {};
+    all.forEach(function(e){ var k=e.node.context; groups[k]=groups[k]||[]; groups[k].push(e); });
+    Object.keys(groups).sort().forEach(function(tag){
+      var h=document.createElement("div"); h.className="ctx-group-title"; h.textContent="@"+tag+" \u00b7 "+groups[tag].length; wrap.appendChild(h);
+      var ledger=document.createElement("div"); ledger.className="ledger";
+      groups[tag].sort(function(a,b){
+        if(a.node.status==="done" && b.node.status!=="done") return 1;
+        if(b.node.status==="done" && a.node.status!=="done") return -1;
+        return (a.node.dueDate||"9999") < (b.node.dueDate||"9999") ? -1:1;
+      }).forEach(function(e){ ledger.appendChild(buildLedgerRow(e)); });
+      wrap.appendChild(ledger);
+    });
+  }
+
+  // ---------------- Edit sheet ----------------
+  function openEditSheet(nodeId, focusAddChecklist){
+    var found = findNode(nodeId);
+    if(!found) return;
+    editingNodeId = nodeId; editingIsNew = false; editingParentId = null;
+    populateSheet(found.node);
+    if(focusAddChecklist){ currentSubitems.push({id:uid(), title:"", done:false}); renderSubitemsEditor(); }
+    showOverlay("editOverlay");
+  }
+
+  function openNewChildSheet(parentId){
+    var found = findNode(parentId);
+    if(!found) return;
+    if(found.node.level >= 3){ showToast("Checklist items don't open a separate editor \u2014 use \u201c+ Add checklist item\u201d"); return; }
+    editingNodeId = null; editingIsNew = true; editingParentId = parentId;
+    var blank = {title:"", status:"todo", priority:"med", dueDate:null, context:null, notesFree:"", recurrence:null, level: found.node.level+1, subitems:[], children:[]};
+    populateSheet(blank);
+    showOverlay("editOverlay");
+  }
+
+  function openNewProjectSheet(){
+    editingNodeId = null; editingIsNew = true; editingParentId = null;
+    var blank = {title:"", status:"todo", priority:"med", dueDate:null, context:null, notesFree:"", recurrence:null, level:1, subitems:[], children:[]};
+    populateSheet(blank);
+    showOverlay("editOverlay");
+  }
+
+  function populateSheet(node){
+    editingLevel = node.level;
+    currentEditRec = node.recurrence ? {freq:node.recurrence.freq, n:node.recurrence.n||1} : null;
+    currentSubitems = (node.subitems || []).map(function(s){ return {id:s.id, title:s.title, done:s.done}; });
+    document.getElementById("editHeading").textContent = (editingIsNew?"New ":"Edit ") + levelName(node.level).toLowerCase();
+    document.getElementById("editLevelTag").textContent = "Level "+node.level+" \u00b7 "+levelName(node.level);
+    document.getElementById("fTitle").value = node.title || "";
+    document.getElementById("fDue").value = node.dueDate || "";
+    document.getElementById("fNotes").value = node.notesFree || "";
+    setSegmented("status", node.status || "todo");
+    setSegmented("priority", node.priority || "med");
+    renderContextChips(node.context);
+    document.getElementById("fContextCustom").value = "";
+    updateRecurUI();
+
+    var isLvl1 = node.level===1;
+    document.querySelectorAll('.seg-btn[data-status]').forEach(function(b){ b.style.pointerEvents = isLvl1?"none":""; b.style.opacity = isLvl1?"0.4":"1"; });
+    document.getElementById("fDue").parentElement.style.display = isLvl1 ? "none":"block";
+    document.getElementById("fContextChips").parentElement.style.display = isLvl1 ? "none":"block";
+    document.getElementById("fRecurSwitch").parentElement.parentElement.style.display = isLvl1 ? "none":"block";
+    document.querySelectorAll('.seg-btn[data-priority]')[0].parentElement.parentElement.style.display = isLvl1?"none":"block";
+
+    var showSubitems = node.level===3;
+    document.getElementById("fSubitemsField").style.display = showSubitems ? "block":"none";
+    if(showSubitems) renderSubitemsEditor();
+
+    document.getElementById("deleteNodeBtn").style.display = editingIsNew ? "none":"inline-block";
+    document.getElementById("addChildBtn").style.display = (!editingIsNew && node.level < 3) ? "inline-block":"none";
+  }
+
+  function renderSubitemsEditor(){
+    var wrap = document.getElementById("subitemsEditor");
+    wrap.innerHTML = "";
+    currentSubitems.forEach(function(si){
+      var row = document.createElement("div"); row.className="subitem-editor-row";
+      var chk = document.createElement("div"); chk.className="lr-check"+(si.done?" done":""); chk.style.flex="0 0 auto";
+      chk.textContent = si.done?"\u2713":"";
+      chk.addEventListener("click", function(){ si.done=!si.done; renderSubitemsEditor(); });
+      var inp = document.createElement("input"); inp.type="text"; inp.value=si.title; inp.placeholder="Checklist item";
+      inp.addEventListener("input", function(){ si.title = inp.value; });
+      var del = document.createElement("button"); del.className="si-del"; del.type="button"; del.textContent="\u2715";
+      del.addEventListener("click", function(){ currentSubitems = currentSubitems.filter(function(x){ return x.id!==si.id; }); renderSubitemsEditor(); });
+      row.appendChild(chk); row.appendChild(inp); row.appendChild(del);
+      wrap.appendChild(row);
+    });
+  }
+  document.getElementById("addSubitemBtn").addEventListener("click", function(){
+    currentSubitems.push({id:uid(), title:"", done:false});
+    renderSubitemsEditor();
+  });
+
+  function setSegmented(kind, value){
+    var attr = kind==="status" ? "data-status" : "data-priority";
+    document.querySelectorAll(".seg-btn["+attr+"]").forEach(function(b){ b.classList.toggle("selected", b.getAttribute(attr)===value); });
+  }
+  function getSegmented(kind){
+    var attr = kind==="status" ? "data-status" : "data-priority";
+    var sel = document.querySelector(".seg-btn["+attr+"].selected");
+    return sel ? sel.getAttribute(attr) : (kind==="status"?"todo":"med");
+  }
+  document.querySelectorAll('.seg-btn[data-status]').forEach(function(b){ b.addEventListener("click", function(){ setSegmented("status", b.getAttribute("data-status")); }); });
+  document.querySelectorAll('.seg-btn[data-priority]').forEach(function(b){ b.addEventListener("click", function(){ setSegmented("priority", b.getAttribute("data-priority")); }); });
+
+  function renderContextChips(selected){
+    var wrap = document.getElementById("fContextChips"); wrap.innerHTML="";
+    var noneChip = document.createElement("div"); noneChip.className="chip-opt"+(!selected?" selected":""); noneChip.textContent="none";
+    noneChip.addEventListener("click", function(){ renderContextChips(null); }); wrap.appendChild(noneChip);
+    state.contextTags.forEach(function(tag){
+      var c=document.createElement("div"); c.className="chip-opt"+(selected===tag?" selected":""); c.textContent="@"+tag;
+      c.addEventListener("click", function(){ renderContextChips(tag); }); wrap.appendChild(c);
+    });
+  }
+  function getSelectedContext(){
+    var sel = document.querySelector("#fContextChips .chip-opt.selected");
+    if(!sel || sel.textContent==="none") return null;
+    return sel.textContent.replace("@","");
+  }
+
+  function updateRecurUI(){
+    var sw=document.getElementById("fRecurSwitch"), opts=document.getElementById("fRecurOptions"), summary=document.getElementById("fRecurSummary");
+    var on = !!currentEditRec;
+    sw.classList.toggle("on", on); opts.style.display = on?"block":"none"; summary.textContent = recurSummary(currentEditRec);
+    if(on){
+      document.getElementById("fRecurFreq").value = currentEditRec.freq;
+      document.getElementById("fRecurN").value = currentEditRec.n || 1;
+      document.getElementById("fRecurN").style.display = currentEditRec.freq==="custom" ? "block":"none";
+    }
+  }
+  document.getElementById("fRecurSwitch").addEventListener("click", function(){
+    currentEditRec = currentEditRec ? null : {freq:"weekly", n:1};
+    updateRecurUI();
+  });
+  document.getElementById("fRecurFreq").addEventListener("change", function(ev){
+    if(!currentEditRec) currentEditRec = {freq:"weekly", n:1};
+    currentEditRec.freq = ev.target.value; updateRecurUI();
+  });
+  document.getElementById("fRecurN").addEventListener("input", function(ev){
+    if(!currentEditRec) currentEditRec = {freq:"custom", n:1};
+    currentEditRec.n = parseInt(ev.target.value,10) || 1;
+  });
+
+  document.getElementById("fContextCustom").addEventListener("keydown", function(ev){
+    if(ev.key==="Enter"){
+      ev.preventDefault();
+      var v = ev.target.value.trim().toLowerCase().replace(/^@/,"");
+      if(v){ if(state.contextTags.indexOf(v)===-1) state.contextTags.push(v); renderContextChips(v); ev.target.value=""; }
+    }
+  });
+
+  function closeSheet(){ hideOverlay("editOverlay"); editingNodeId=null; editingParentId=null; editingIsNew=false; }
+
+  function saveNodeFromSheet(){
+    var title = document.getElementById("fTitle").value.trim();
+    if(!title){ showToast("Title required"); return; }
+    var due = document.getElementById("fDue").value || null;
+    var notesFree = document.getElementById("fNotes").value;
+    var status = getSegmented("status");
+    var priority = getSegmented("priority");
+    var context = getSelectedContext();
+    var rec = currentEditRec ? {freq:currentEditRec.freq, n:currentEditRec.n||1} : null;
+    var subitems = currentSubitems.filter(function(s){ return s.title.trim().length>0; });
+
+    if(editingIsNew){
+      if(editingLevel===1){
+        runSync(function(){ return insertTaskList(title); }).then(function(created){
+          state.lists.push({id:created.id, level:1, title:created.title, children:[]});
+          closeSheet(); renderAll();
+        }).catch(function(){});
+        return;
+      }
+      var parentFound = findNode(editingParentId);
+      var listId = editingLevel===2 ? editingParentId : parentFound.node.listId;
+      var parentTaskId = editingLevel===3 ? editingParentId : null;
+      var body = {title:title, notes:""};
+      var tempNode = {title:title, level:editingLevel, priority:priority, context:context, recurrence:rec, notesFree:notesFree, subitems:subitems};
+      body.notes = encodeMeta(tempNode);
+      if(status==="done") body.status = "completed";
+      if(due) body.due = due+"T00:00:00.000Z";
+      runSync(function(){ return insertTask(listId, body, parentTaskId); }).then(function(created){
+        var newNode = {
+          id:created.id, listId:listId, parentId:parentTaskId, title:title,
+          status: status==="done"?"done":"todo", priority:priority, context:context, recurrence:rec,
+          subitems:subitems, notesFree:notesFree, dueDate:due, position:created.position||"", level:editingLevel, children:[]
+        };
+        if(editingLevel===2){ parentFound.node.children.push(newNode); state.expanded[editingParentId]=true; }
+        else { parentFound.node.children.push(newNode); state.expanded[editingParentId]=true; }
+        closeSheet(); renderAll();
+      }).catch(function(){});
+    } else {
+      var found = findNode(editingNodeId);
+      if(!found) return;
+      var node = found.node;
+      if(node.level===1){
+        if(title !== node.title){
+          runSync(function(){ return apiFetch("/users/@me/lists/"+encodeURIComponent(node.id), {method:"PATCH", body:JSON.stringify({title:title})}); }).then(function(){
+            node.title = title; closeSheet(); renderAll();
+          }).catch(function(){});
+        } else { closeSheet(); }
+        return;
+      }
+      var updated = {title:title, level:node.level, priority:priority, context:context, recurrence:rec, notesFree:notesFree, subitems:subitems};
+      var patchBody = {title:title, notes: encodeMeta(updated), status: status==="done" ? "completed":"needsAction"};
+      patchBody.due = due ? (due+"T00:00:00.000Z") : null;
+      runSync(function(){ return patchTask(node.listId, node.id, patchBody); }).then(function(){
+        node.title=title; node.status = status; node.priority=priority; node.context=context;
+        node.recurrence=rec; node.notesFree=notesFree; node.subitems=subitems; node.dueDate=due;
+        closeSheet(); renderAll();
+      }).catch(function(){});
+    }
+  }
+
+  function deleteCurrentNode(){
+    if(editingIsNew || !editingNodeId){ closeSheet(); return; }
+    var nodeId = editingNodeId;
+    showConfirm("Delete this item"+(document.getElementById("editLevelTag").textContent.indexOf("Project")>-1?" and everything in it":" and its subtasks")+" from Google Tasks?", function(){
+      var found = findNode(nodeId);
+      if(!found) return;
+      var node = found.node;
+      var action = node.level===1
+        ? function(){ return deleteTaskListApi(node.id); }
+        : function(){ return deleteTaskApi(node.listId, node.id); };
+      runSync(action).then(function(){
+        var idx = found.parentArr.indexOf(node);
+        if(idx>-1) found.parentArr.splice(idx,1);
+        closeSheet(); renderAll();
+      }).catch(function(){});
+    });
+  }
+
+  // ---------------- Confirm overlay ----------------
+  var confirmCallback = null;
+  function showConfirm(msg, onConfirm){ document.getElementById("confirmMessage").textContent=msg; confirmCallback=onConfirm; showOverlay("confirmOverlay"); }
+  document.getElementById("confirmCancelBtn").addEventListener("click", function(){ confirmCallback=null; hideOverlay("confirmOverlay"); });
+  document.getElementById("confirmOkBtn").addEventListener("click", function(){ var cb=confirmCallback; confirmCallback=null; hideOverlay("confirmOverlay"); if(cb) cb(); });
+  document.getElementById("confirmOverlay").addEventListener("click", function(ev){ if(ev.target.id==="confirmOverlay"){ confirmCallback=null; hideOverlay("confirmOverlay"); } });
+
+  function showOverlay(id){ document.getElementById(id).classList.add("open"); }
+  function hideOverlay(id){ document.getElementById(id).classList.remove("open"); }
+  var toastTimer=null;
+  function showToast(msg){ var t=document.getElementById("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toastTimer); toastTimer=setTimeout(function(){ t.classList.remove("show"); }, 2800); }
+
+  function switchView(name){
+    document.querySelectorAll(".view").forEach(function(v){ v.classList.remove("active"); });
+    document.getElementById("view-"+name).classList.add("active");
+    document.querySelectorAll("nav.tabs button").forEach(function(b){ b.classList.toggle("active", b.getAttribute("data-view")===name); });
+  }
+
+  function buildExportText(){
+    var lines=[];
+    flattenAll().forEach(function(e){
+      var indent = "  ".repeat(e.node.level-1);
+      var statusMark = e.node.status==="done" ? "[x]" : "[ ]";
+      var bits = [indent+e.num+". "+statusMark+" "+e.node.title];
+      var meta=[];
+      if(e.node.priority && e.node.priority!=="med") meta.push("priority:"+e.node.priority);
+      if(e.node.context) meta.push("@"+e.node.context);
+      if(e.node.dueDate) meta.push("due:"+e.node.dueDate);
+      if(e.node.recurrence) meta.push(recurSummary(e.node.recurrence));
+      if(meta.length) bits.push("    ("+meta.join(", ")+")");
+      if(e.node.subitems && e.node.subitems.length){
+        e.node.subitems.forEach(function(si){ bits.push(indent+"    - ["+(si.done?"x":" ")+"] "+si.title); });
+      }
+      lines.push(bits.join("\n"));
+    });
+    return lines.join("\n") || "(no items yet)";
+  }
+
+  function renderLoadBanner(){
+    var el = document.getElementById("loadBanner");
+    if(loadState==="error"){
+      el.style.display="block"; el.className="load-banner"; el.innerHTML="";
+      var msg = document.createElement("div"); msg.textContent="Couldn't reach Google Tasks just now. Nothing has changed \u2014 tap Retry.";
+      el.appendChild(msg);
+      var retry = document.createElement("button"); retry.className="btn small"; retry.textContent="Retry";
+      retry.addEventListener("click", function(){ reloadAndRender(); });
+      el.appendChild(retry);
+    } else { el.style.display="none"; }
+  }
+
+  function renderAll(){
+    renderQuickAddOptions(); renderProjectCards(); renderDueList(); renderTree(); renderPlanner(); renderContextView();
+  }
+
+  // ---------------- Wiring ----------------
+  document.querySelectorAll("nav.tabs button").forEach(function(b){ b.addEventListener("click", function(){ switchView(b.getAttribute("data-view")); }); });
+  document.getElementById("fabAdd").addEventListener("click", openNewProjectSheet);
+  document.getElementById("newProjectBtn").addEventListener("click", openNewProjectSheet);
+
+  document.getElementById("qaBtn").addEventListener("click", function(){
+    var sel = document.getElementById("qaProject"); var input = document.getElementById("qaTitle");
+    var title = input.value.trim();
+    if(!title){ showToast("Enter a task title"); return; }
+    if(!sel.value){ showToast("Add a project first"); return; }
+    var parent = findNode(sel.value);
+    if(!parent) return;
+    runSync(function(){ return insertTask(parent.node.id, {title:title, notes:""}, null); }).then(function(created){
+      parent.node.children.push({id:created.id, listId:parent.node.id, parentId:null, title:title, status:"todo", priority:"med", context:null, recurrence:null, subitems:[], notesFree:"", dueDate:null, position:created.position||"", level:2, children:[]});
+      state.expanded[parent.node.id]=true;
+      input.value=""; renderAll(); showToast("Added to "+parent.node.title);
+    }).catch(function(){});
+  });
+
+  document.getElementById("cancelEditBtn").addEventListener("click", closeSheet);
+  document.getElementById("saveNodeBtn").addEventListener("click", saveNodeFromSheet);
+  document.getElementById("deleteNodeBtn").addEventListener("click", deleteCurrentNode);
+  document.getElementById("addChildBtn").addEventListener("click", function(){
+    if(!editingNodeId) return;
+    var id = editingNodeId;
+    saveNodeFromSheet();
+    setTimeout(function(){ openNewChildSheet(id); }, 250);
+  });
+  document.getElementById("editOverlay").addEventListener("click", function(ev){ if(ev.target.id==="editOverlay") closeSheet(); });
+
+  document.getElementById("prevWeekBtn").addEventListener("click", function(){ weekOffset--; renderPlanner(); });
+  document.getElementById("nextWeekBtn").addEventListener("click", function(){ weekOffset++; renderPlanner(); });
+
+  document.getElementById("exportBtn").addEventListener("click", function(){ document.getElementById("exportText").value = buildExportText(); showOverlay("exportOverlay"); });
+  document.getElementById("closeExportBtn").addEventListener("click", function(){ hideOverlay("exportOverlay"); });
+  document.getElementById("exportOverlay").addEventListener("click", function(ev){ if(ev.target.id==="exportOverlay") hideOverlay("exportOverlay"); });
+  document.getElementById("copyExportBtn").addEventListener("click", function(){
+    var box = document.getElementById("exportText"); box.select(); box.setSelectionRange(0,999999);
+    var copied=false;
+    try{ if(navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(box.value); copied=true; } }catch(e){}
+    if(!copied){ try{ document.execCommand("copy"); copied=true; }catch(e){} }
+    showToast(copied ? "Copied to clipboard" : "Select the text above and copy manually");
+  });
+
+  document.getElementById("refreshBtn").addEventListener("click", function(){ reloadAndRender(); });
+
+  document.getElementById("disconnectBtn").addEventListener("click", function(){
+    showConfirm("Sign out of Google Tasks on this device? Your tasks stay safe in Google Tasks \u2014 this just forgets the local sign-in.", function(){
+      accessToken=null; tokenExpiryMs=0; localStorage.removeItem(LS_EVER_AUTHED);
+      showGate("connect");
+    });
+  });
+
+  // ---------------- Setup / connect gates ----------------
+  document.getElementById("saveClientIdBtn").addEventListener("click", function(){
+    var v = document.getElementById("clientIdInput").value.trim();
+    if(!v){ showToast("Paste your Client ID first"); return; }
+    state.clientId = v;
+    localStorage.setItem(LS_CLIENT_ID, v);
+    initTokenClient().then(function(){ showGate("connect"); }).catch(function(err){ showToast(err.message); });
+  });
+  document.getElementById("changeClientIdBtn").addEventListener("click", function(){ showGate("setup"); });
+  document.getElementById("signInBtn").addEventListener("click", function(){
+    document.getElementById("signInBtn").disabled = true;
+    ensureToken().then(function(){
+      showGate("app");
+      return reloadAndRender();
+    }).catch(function(err){
+      document.getElementById("signInBtn").disabled = false;
+      showToast("Sign-in failed: " + (err && err.message ? err.message : "unknown error"));
+    });
+  });
+
+  function showGate(which){
+    document.getElementById("setupGate").style.display = which==="setup" ? "block":"none";
+    document.getElementById("connectGate").style.display = which==="connect" ? "block":"none";
+    document.getElementById("mainContent").style.display = which==="app" ? "block":"none";
+    document.getElementById("mainTabs").style.display = which==="app" ? "flex":"none";
+    document.getElementById("fabAdd").style.display = which==="app" ? "block":"none";
+    document.getElementById("refreshBtn").style.display = which==="app" ? "inline-block":"none";
+    document.getElementById("exportBtn").style.display = which==="app" ? "inline-block":"none";
+    document.getElementById("disconnectBtn").style.display = which==="app" ? "inline-block":"none";
+    document.getElementById("signInBtn").disabled = false;
+  }
+
+  // ---------------- Init ----------------
+  if(state.clientId){
+    document.getElementById("clientIdInput").value = state.clientId;
+    initTokenClient().then(function(){
+      showGate("connect");
+    }).catch(function(err){
+      showGate("setup");
+      showToast(err.message);
+    });
+  } else {
+    showGate("setup");
+  }
+
+})();
+</script>
+</body>
+</html>

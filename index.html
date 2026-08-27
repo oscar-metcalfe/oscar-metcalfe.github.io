@@ -440,8 +440,11 @@
     </div>
 
     <div class="field">
-      <label>Due date</label>
-      <input type="date" id="fDue">
+      <label>Due date &amp; time</label>
+      <div class="rec-row">
+        <input type="date" id="fDue">
+        <input type="time" id="fTime">
+      </div>
     </div>
 
     <div class="field">
@@ -550,6 +553,33 @@
   function isoFromDate(d){ var y=d.getFullYear(), m=("0"+(d.getMonth()+1)).slice(-2), day=("0"+d.getDate()).slice(-2); return y+"-"+m+"-"+day; }
   function parseISO(s){ if(!s) return null; var p=s.split("-"); return new Date(parseInt(p[0],10), parseInt(p[1],10)-1, parseInt(p[2],10)); }
   function fmtDate(s){ if(!s) return ""; var d=parseISO(s); var months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return months[d.getMonth()]+" "+d.getDate(); }
+  function pad2(n){ return ("0"+n).slice(-2); }
+  function fmtTime12(hhmm){ if(!hhmm) return ""; var p=hhmm.split(":"); var h=parseInt(p[0],10); var ap=h>=12?"PM":"AM"; var h12=h%12; if(h12===0) h12=12; return h12+":"+p[1]+" "+ap; }
+  function fmtDue(dueDate, dueTime){ if(!dueDate) return ""; return fmtDate(dueDate) + (dueTime ? (", "+fmtTime12(dueTime)) : ""); }
+  // "T00:00:00.000Z" is our all-day marker (date-only, timezone-agnostic).
+  // Anything else is a real instant, converted back through Date's local getters.
+  var ALLDAY_SUFFIX = "T00:00:00.000Z";
+  function decodeDue(dueStr){
+    if(!dueStr) return {dueDate:null, dueTime:null};
+    if(dueStr.slice(-ALLDAY_SUFFIX.length) === ALLDAY_SUFFIX){ return {dueDate: dueStr.slice(0,10), dueTime:null}; }
+    var d = new Date(dueStr);
+    return {dueDate: isoFromDate(d), dueTime: pad2(d.getHours())+":"+pad2(d.getMinutes())};
+  }
+  function encodeDue(dateISO, timeHHMM){
+    if(!dateISO) return null;
+    if(!timeHHMM) return dateISO + ALLDAY_SUFFIX;
+    var d = parseISO(dateISO);
+    var p = timeHHMM.split(":");
+    d.setHours(parseInt(p[0],10), parseInt(p[1],10), 0, 0);
+    return d.toISOString();
+  }
+  // Blank/blank stays blank; time-only defaults the date to today; date-only is all-day.
+  function normalizeDueFields(dateStr, timeStr){
+    dateStr = dateStr || null; timeStr = timeStr || null;
+    if(!dateStr && !timeStr) return {dueDate:null, dueTime:null};
+    if(!dateStr && timeStr) return {dueDate: todayISO(), dueTime: timeStr};
+    return {dueDate: dateStr, dueTime: timeStr};
+  }
   function fmtDay(d){ var days=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]; var months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]; return days[d.getDay()]+" "+months[d.getMonth()]+" "+d.getDate(); }
   function addDays(d,n){ var r=new Date(d); r.setDate(r.getDate()+n); return r; }
   function startOfWeek(d){ var r=new Date(d); var day=r.getDay(); var diff=(day===0?-6:1-day); return addDays(r,diff); }
@@ -743,13 +773,14 @@
     var byId = {};
     rawTasks.forEach(function(t){
       var decoded = decodeMeta(t.notes);
+      var dd = decodeDue(t.due);
       byId[t.id] = {
         id:t.id, listId:list.id, parentId:t.parent||null,
         title:t.title||"(untitled)",
         status: t.status==="completed" ? "done":"todo",
         priority: decoded.priority, context: decoded.context, recurrence: decoded.recurrence,
         subitems: decoded.subitems, notesFree: decoded.notesFree,
-        dueDate: t.due ? t.due.slice(0,10) : null,
+        dueDate: dd.dueDate, dueTime: dd.dueTime,
         position: t.position || "",
         level: t.parent ? 3 : 2,
         children: []
@@ -831,10 +862,10 @@
     if(node.recurrence){
       var nextDue = nextDueDate(node.dueDate, node.recurrence);
       runSync(function(){
-        return patchTask(node.listId, node.id, {status:"needsAction", due: nextDue+"T00:00:00.000Z"});
+        return patchTask(node.listId, node.id, {status:"needsAction", due: encodeDue(nextDue, node.dueTime)});
       }).then(function(){
         node.dueDate = nextDue; node.status = "todo";
-        showToast("Recurring \u2014 next due " + fmtDate(nextDue));
+        showToast("Recurring \u2014 next due " + fmtDue(nextDue, node.dueTime));
         renderAll();
       }).catch(function(){});
     } else {
@@ -877,7 +908,7 @@
       var pct = r.total ? Math.round((r.done/r.total)*100) : 0;
       var flat = flattenAll().filter(function(e){ return e.path[0].id===p.id && e.node.dueDate && e.node.status!=="done"; });
       flat.sort(function(a,b){ return a.node.dueDate < b.node.dueDate ? -1:1; });
-      var nextDue = flat.length ? fmtDate(flat[0].node.dueDate) : "\u2014";
+      var nextDue = flat.length ? fmtDue(flat[0].node.dueDate, flat[0].node.dueTime) : "\u2014";
       var card = document.createElement("div");
       card.className = "proj-card";
       card.innerHTML = '<div class="pc-top"><div class="pc-title"></div><div class="pc-count">'+r.done+"/"+r.total+'</div></div>'+
@@ -921,7 +952,7 @@
     var right = document.createElement("div");
     right.className = "lr-right";
     if(node.context){ var chip=document.createElement("span"); chip.className="chip ctx"; chip.textContent="@"+node.context; right.appendChild(chip); }
-    if(node.dueDate){ var d=document.createElement("span"); d.className="lr-date"+(overdue?" overdue":""); d.textContent=fmtDate(node.dueDate); right.appendChild(d); }
+    if(node.dueDate){ var d=document.createElement("span"); d.className="lr-date"+(overdue?" overdue":""); d.textContent=fmtDue(node.dueDate, node.dueTime); right.appendChild(d); }
     row.appendChild(check); row.appendChild(body); row.appendChild(right);
     row.addEventListener("click", function(){ openEditSheet(node.id); });
     return row;
@@ -962,7 +993,7 @@
     if(node.priority==="high") sub.appendChild(makeChip("High","pri-high"));
     else if(node.priority==="med" && node.level>1) {}
     if(node.context) sub.appendChild(makeChip("@"+node.context,"ctx"));
-    if(node.dueDate) sub.appendChild(makeChip(fmtDate(node.dueDate), (node.dueDate<todayISO() && node.status!=="done") ? "pri-high":"repeat"));
+    if(node.dueDate) sub.appendChild(makeChip(fmtDue(node.dueDate, node.dueTime), (node.dueDate<todayISO() && node.status!=="done") ? "pri-high":"repeat"));
     if(node.recurrence) sub.appendChild(makeChip(recurSummary(node.recurrence),"repeat"));
     if(node.level===3 && node.subitems && node.subitems.length) sub.appendChild(makeChip(node.subitems.filter(function(s){return s.done;}).length+"/"+node.subitems.length+" checklist","repeat"));
     if(sub.children.length) mainWrap.appendChild(sub);
@@ -1112,6 +1143,7 @@
     document.getElementById("editLevelTag").textContent = "Level "+node.level+" \u00b7 "+levelName(node.level);
     document.getElementById("fTitle").value = node.title || "";
     document.getElementById("fDue").value = node.dueDate || "";
+    document.getElementById("fTime").value = node.dueTime || "";
     document.getElementById("fNotes").value = node.notesFree || "";
     setSegmented("status", node.status || "todo");
     setSegmented("priority", node.priority || "med");
@@ -1121,7 +1153,7 @@
 
     var isLvl1 = node.level===1;
     document.querySelectorAll('.seg-btn[data-status]').forEach(function(b){ b.style.pointerEvents = isLvl1?"none":""; b.style.opacity = isLvl1?"0.4":"1"; });
-    document.getElementById("fDue").parentElement.style.display = isLvl1 ? "none":"block";
+    document.getElementById("fDue").parentElement.parentElement.style.display = isLvl1 ? "none":"block";
     document.getElementById("fContextChips").parentElement.style.display = isLvl1 ? "none":"block";
     document.getElementById("fRecurSwitch").parentElement.parentElement.style.display = isLvl1 ? "none":"block";
     document.querySelectorAll('.seg-btn[data-priority]')[0].parentElement.parentElement.style.display = isLvl1?"none":"block";
@@ -1218,7 +1250,8 @@
   function saveNodeFromSheet(){
     var title = document.getElementById("fTitle").value.trim();
     if(!title){ showToast("Title required"); return; }
-    var due = document.getElementById("fDue").value || null;
+    var norm = normalizeDueFields(document.getElementById("fDue").value, document.getElementById("fTime").value);
+    var due = norm.dueDate, dueTime = norm.dueTime;
     var notesFree = document.getElementById("fNotes").value;
     var status = getSegmented("status");
     var priority = getSegmented("priority");
@@ -1241,12 +1274,12 @@
       var tempNode = {title:title, level:editingLevel, priority:priority, context:context, recurrence:rec, notesFree:notesFree, subitems:subitems};
       body.notes = encodeMeta(tempNode);
       if(status==="done") body.status = "completed";
-      if(due) body.due = due+"T00:00:00.000Z";
+      if(due) body.due = encodeDue(due, dueTime);
       runSync(function(){ return insertTask(listId, body, parentTaskId); }).then(function(created){
         var newNode = {
           id:created.id, listId:listId, parentId:parentTaskId, title:title,
           status: status==="done"?"done":"todo", priority:priority, context:context, recurrence:rec,
-          subitems:subitems, notesFree:notesFree, dueDate:due, position:created.position||"", level:editingLevel, children:[]
+          subitems:subitems, notesFree:notesFree, dueDate:due, dueTime:dueTime, position:created.position||"", level:editingLevel, children:[]
         };
         if(editingLevel===2){ parentFound.node.children.push(newNode); state.expanded[editingParentId]=true; }
         else { parentFound.node.children.push(newNode); state.expanded[editingParentId]=true; }
@@ -1266,10 +1299,10 @@
       }
       var updated = {title:title, level:node.level, priority:priority, context:context, recurrence:rec, notesFree:notesFree, subitems:subitems};
       var patchBody = {title:title, notes: encodeMeta(updated), status: status==="done" ? "completed":"needsAction"};
-      patchBody.due = due ? (due+"T00:00:00.000Z") : null;
+      patchBody.due = due ? encodeDue(due, dueTime) : null;
       runSync(function(){ return patchTask(node.listId, node.id, patchBody); }).then(function(){
         node.title=title; node.status = status; node.priority=priority; node.context=context;
-        node.recurrence=rec; node.notesFree=notesFree; node.subitems=subitems; node.dueDate=due;
+        node.recurrence=rec; node.notesFree=notesFree; node.subitems=subitems; node.dueDate=due; node.dueTime=dueTime;
         closeSheet(); renderAll();
       }).catch(function(){});
     }
@@ -1320,7 +1353,7 @@
       var meta=[];
       if(e.node.priority && e.node.priority!=="med") meta.push("priority:"+e.node.priority);
       if(e.node.context) meta.push("@"+e.node.context);
-      if(e.node.dueDate) meta.push("due:"+e.node.dueDate);
+      if(e.node.dueDate) meta.push("due:"+e.node.dueDate+(e.node.dueTime?(" "+e.node.dueTime):""));
       if(e.node.recurrence) meta.push(recurSummary(e.node.recurrence));
       if(meta.length) bits.push("    ("+meta.join(", ")+")");
       if(e.node.subitems && e.node.subitems.length){
@@ -1360,7 +1393,7 @@
     var parent = findNode(sel.value);
     if(!parent) return;
     runSync(function(){ return insertTask(parent.node.id, {title:title, notes:""}, null); }).then(function(created){
-      parent.node.children.push({id:created.id, listId:parent.node.id, parentId:null, title:title, status:"todo", priority:"med", context:null, recurrence:null, subitems:[], notesFree:"", dueDate:null, position:created.position||"", level:2, children:[]});
+      parent.node.children.push({id:created.id, listId:parent.node.id, parentId:null, title:title, status:"todo", priority:"med", context:null, recurrence:null, subitems:[], notesFree:"", dueDate:null, dueTime:null, position:created.position||"", level:2, children:[]});
       state.expanded[parent.node.id]=true;
       input.value=""; renderAll(); showToast("Added to "+parent.node.title);
     }).catch(function(){});

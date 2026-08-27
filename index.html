@@ -320,6 +320,7 @@
     <button data-view="tree">Projects</button>
     <button data-view="planner">Planner</button>
     <button data-view="context">By Context</button>
+    <button data-view="priority">By Priority</button>
   </nav>
 </header>
 
@@ -394,6 +395,10 @@
 
   <section class="view" id="view-context">
     <div id="contextGroups"></div>
+  </section>
+
+  <section class="view" id="view-priority">
+    <div id="priorityGroups"></div>
   </section>
 
 </main>
@@ -1043,6 +1048,26 @@
     });
   }
 
+  // ---------------- Rendering: By Priority ----------------
+  function renderPriorityGroups(){
+    var wrap = document.getElementById("priorityGroups"); wrap.innerHTML="";
+    var order = ["high","med","low"], labels = {high:"High priority", med:"Medium priority", low:"Low priority"};
+    var all = flattenAll().filter(function(e){ return e.node.level>1; });
+    order.forEach(function(p){
+      var items = all.filter(function(e){ return (e.node.priority||"med")===p; });
+      if(items.length===0) return;
+      var h=document.createElement("div"); h.className="ctx-group-title"; h.textContent=labels[p]+" \u00b7 "+items.length; wrap.appendChild(h);
+      var ledger=document.createElement("div"); ledger.className="ledger";
+      items.sort(function(a,b){
+        if(a.node.status==="done" && b.node.status!=="done") return 1;
+        if(b.node.status==="done" && a.node.status!=="done") return -1;
+        return (a.node.dueDate||"9999") < (b.node.dueDate||"9999") ? -1:1;
+      }).forEach(function(e){ ledger.appendChild(buildLedgerRow(e)); });
+      wrap.appendChild(ledger);
+    });
+    if(wrap.children.length===0) wrap.innerHTML = '<div class="empty-hint">No tasks yet.</div>';
+  }
+
   // ---------------- Edit sheet ----------------
   function openEditSheet(nodeId, focusAddChecklist){
     var found = findNode(nodeId);
@@ -1310,7 +1335,7 @@
   }
 
   function renderAll(){
-    renderQuickAddOptions(); renderProjectCards(); renderDueList(); renderTree(); renderPlanner(); renderContextView();
+    renderQuickAddOptions(); renderProjectCards(); renderDueList(); renderTree(); renderPlanner(); renderContextView(); renderPriorityGroups();
   }
 
   // ---------------- Wiring ----------------

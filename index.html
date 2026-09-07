@@ -243,9 +243,6 @@
   .seg-btn.sel-todo.selected{background:var(--paper-dim-2); color:var(--text); border-color:var(--text-dim);}
   .seg-btn.sel-inprogress.selected{background:var(--slate-dim); color:var(--slate); border-color:var(--slate);}
   .seg-btn.sel-done.selected{background:var(--moss-dim); color:var(--moss); border-color:var(--moss);}
-  .seg-btn.sel-low.selected{background:var(--paper-dim-2); color:var(--text); border-color:var(--text-dim);}
-  .seg-btn.sel-med.selected{background:var(--amber-dim); color:var(--amber); border-color:var(--amber);}
-  .seg-btn.sel-high.selected{background:var(--rust-dim); color:var(--rust); border-color:var(--rust);}
   .chip-select{display:flex; gap:6px; flex-wrap:wrap;}
   .chip-opt{
     font-family:var(--mono); font-size:0.68rem; padding:6px 11px; border-radius:12px; border:1px solid var(--rule);
@@ -320,7 +317,7 @@
     <button data-view="tree">Projects</button>
     <button data-view="planner">Planner</button>
     <button data-view="context">By Context</button>
-    <button data-view="priority">By Priority</button>
+    <button data-view="pullqueue">Pull Queue</button>
     <button data-view="completed">Completed</button>
   </nav>
 </header>
@@ -398,8 +395,13 @@
     <div id="contextGroups"></div>
   </section>
 
-  <section class="view" id="view-priority">
-    <div id="priorityGroups"></div>
+  <section class="view" id="view-pullqueue">
+    <div class="rec-row" style="margin-bottom:12px;">
+      <span class="pn-label">Capacity <span id="wipUsage"></span></span>
+      <input type="number" id="wipLimitInput" min="1" style="max-width:70px;">
+      <span class="pn-label" id="velocityStat"></span>
+    </div>
+    <div id="pullQueueGroups"></div>
   </section>
 
   <section class="view" id="view-completed">
@@ -430,12 +432,15 @@
       </div>
     </div>
 
-    <div class="field">
-      <label>Priority</label>
-      <div class="segmented">
-        <div class="seg-btn sel-low" data-priority="low">Low</div>
-        <div class="seg-btn sel-med" data-priority="med">Medium</div>
-        <div class="seg-btn sel-high" data-priority="high">High</div>
+    <div class="field" id="fWsjfField">
+      <label>WSJF inputs (leave any blank to exclude from the Pull Queue)</label>
+      <div class="rec-row">
+        <select id="fValue"><option value="">Value &mdash;</option><option>1</option><option>2</option><option>3</option><option>5</option><option>8</option><option>13</option></select>
+        <select id="fTimecrit"><option value="">Time crit &mdash;</option><option>1</option><option>2</option><option>3</option><option>5</option><option>8</option><option>13</option></select>
+      </div>
+      <div class="rec-row" style="margin-top:7px;">
+        <select id="fRisk"><option value="">Risk/Opp &mdash;</option><option>1</option><option>2</option><option>3</option><option>5</option><option>8</option><option>13</option></select>
+        <select id="fSize"><option value="">Size &mdash;</option><option>1</option><option>2</option><option>3</option><option>5</option><option>8</option><option>13</option></select>
       </div>
     </div>
 
@@ -527,6 +532,7 @@
   var SCOPES = "https://www.googleapis.com/auth/tasks";
   var LS_CLIENT_ID = "gt-tracker-client-id";
   var LS_EVER_AUTHED = "gt-tracker-ever-authed";
+  var LS_WIP_LIMIT = "gt-tracker-wip-limit";
   var API_BASE = "https://tasks.googleapis.com/tasks/v1";
   var DEFAULT_CONTEXTS = ["errands","home","computer","calls","waiting-for"];
   var META_MARK = "\u00a7meta", SUB_MARK = "\u00a7subtasks", NOTES_MARK = "\u00a7notes";
@@ -604,6 +610,14 @@
     return {done:done, total:total};
   }
 
+  // WSJF = (Value + Time Criticality + Risk/Opportunity) / Job Size. null if
+  // any of the four inputs is unset -- an unscored task is excluded from the
+  // Pull Queue rather than shown at a misleading default rank.
+  function wsjfScore(node){
+    if(node.value==null || node.timecrit==null || node.risk==null || !node.size) return null;
+    return (node.value + node.timecrit + node.risk) / node.size;
+  }
+
   function controlNumbers(nodes, prefix){
     var out=[];
     nodes.forEach(function(n,i){
@@ -651,7 +665,11 @@
   function encodeMeta(node){
     var lines=[];
     var metaParts=[];
-    if(node.priority && node.priority!=="med") metaParts.push("priority="+node.priority);
+    if(node.value!=null) metaParts.push("value="+node.value);
+    if(node.timecrit!=null) metaParts.push("timecrit="+node.timecrit);
+    if(node.risk!=null) metaParts.push("risk="+node.risk);
+    if(node.size!=null) metaParts.push("size="+node.size);
+    if(node.kanban) metaParts.push("kanban="+node.kanban);
     if(node.context) metaParts.push("context="+node.context);
     if(node.recurrence) metaParts.push("recur="+node.recurrence.freq+(node.recurrence.freq==="custom" ? (":"+(node.recurrence.n||1)) : ""));
     if(metaParts.length) lines.push(META_MARK+" "+metaParts.join(" "));
@@ -664,7 +682,7 @@
   }
 
   function decodeMeta(rawNotes){
-    var result = {priority:"med", context:null, recurrence:null, subitems:[], notesFree:""};
+    var result = {value:null, timecrit:null, risk:null, size:null, kanban:null, context:null, recurrence:null, subitems:[], notesFree:""};
     if(!rawNotes) return result;
     var lines = rawNotes.split("\n");
     var section = null;
@@ -675,7 +693,11 @@
         var parts = line.slice(META_MARK.length).trim().split(/\s+/).filter(Boolean);
         parts.forEach(function(p){
           var kv = p.split("=");
-          if(kv[0]==="priority") result.priority = kv[1];
+          if(kv[0]==="value") result.value = parseInt(kv[1],10);
+          else if(kv[0]==="timecrit") result.timecrit = parseInt(kv[1],10);
+          else if(kv[0]==="risk") result.risk = parseInt(kv[1],10);
+          else if(kv[0]==="size") result.size = parseInt(kv[1],10);
+          else if(kv[0]==="kanban") result.kanban = kv[1];
           else if(kv[0]==="context") result.context = kv[1];
           else if(kv[0]==="recur"){
             var rp = kv[1].split(":");
@@ -778,7 +800,9 @@
         id:t.id, listId:list.id, parentId:t.parent||null,
         title:t.title||"(untitled)",
         status: t.status==="completed" ? "done":"todo",
-        priority: decoded.priority, context: decoded.context, recurrence: decoded.recurrence,
+        value: decoded.value, timecrit: decoded.timecrit, risk: decoded.risk, size: decoded.size,
+        kanban: decoded.kanban, completedAt: t.completed || null,
+        context: decoded.context, recurrence: decoded.recurrence,
         subitems: decoded.subitems, notesFree: decoded.notesFree,
         dueDate: dd.dueDate, dueTime: dd.dueTime,
         position: t.position || "",
@@ -861,10 +885,13 @@
     }
     if(node.recurrence){
       var nextDue = nextDueDate(node.dueDate, node.recurrence);
+      // Kanban resets to Backlog on recurrence (a fresh occurrence shouldn't
+      // inherit a stale WIP claim); WSJF inputs carry over unchanged.
+      var resetForRecur = Object.assign({}, node, {kanban:null});
       runSync(function(){
-        return patchTask(node.listId, node.id, {status:"needsAction", due: encodeDue(nextDue, node.dueTime)});
+        return patchTask(node.listId, node.id, {status:"needsAction", due: encodeDue(nextDue, node.dueTime), notes: encodeMeta(resetForRecur)});
       }).then(function(){
-        node.dueDate = nextDue; node.status = "todo";
+        node.dueDate = nextDue; node.status = "todo"; node.kanban = null;
         showToast("Recurring \u2014 next due " + fmtDue(nextDue, node.dueTime));
         renderAll();
       }).catch(function(){});
@@ -990,8 +1017,6 @@
     title.textContent = node.title;
     mainWrap.appendChild(title);
     var sub = document.createElement("div"); sub.className="node-sub";
-    if(node.priority==="high") sub.appendChild(makeChip("High","pri-high"));
-    else if(node.priority==="med" && node.level>1) {}
     if(node.context) sub.appendChild(makeChip("@"+node.context,"ctx"));
     if(node.dueDate) sub.appendChild(makeChip(fmtDue(node.dueDate, node.dueTime), (node.dueDate<todayISO() && node.status!=="done") ? "pri-high":"repeat"));
     if(node.recurrence) sub.appendChild(makeChip(recurSummary(node.recurrence),"repeat"));
@@ -1082,22 +1107,80 @@
     });
   }
 
-  // ---------------- Rendering: By Priority ----------------
-  function renderPriorityGroups(){
-    var wrap = document.getElementById("priorityGroups"); wrap.innerHTML="";
-    var order = ["high","med","low"], labels = {high:"High priority", med:"Medium priority", low:"Low priority"};
+  // ---------------- Pull Queue: capacity, velocity, kanban actions ----------------
+  function wipLimit(){ return parseInt(localStorage.getItem(LS_WIP_LIMIT),10) || 3; }
+  function setWipLimit(n){ localStorage.setItem(LS_WIP_LIMIT, String(n)); }
+  // Blocked still counts against WIP -- it's still yours, still stuck, and
+  // that's what creates pressure to unblock it rather than park it.
+  function kanbanUsage(){
+    return flattenAll().filter(function(e){ return e.node.level>1 && (e.node.kanban==="inprogress"||e.node.kanban==="blocked"); }).length;
+  }
+  // Job Size points completed in the last 7 days, from Google's own native
+  // `completed` timestamp -- counts any completed+sized task, whether or not
+  // it ever passed through Backlog/In Progress/Blocked.
+  function weeklyVelocity(){
+    var cutoff = Date.now() - 7*24*60*60*1000;
+    return flattenAll().filter(function(e){
+      var n=e.node;
+      return n.level>1 && n.status==="done" && n.size && n.completedAt && new Date(n.completedAt).getTime()>=cutoff;
+    }).reduce(function(sum,e){ return sum+e.node.size; }, 0);
+  }
+  function setKanban(id, value){
+    var found = findNode(id); if(!found) return;
+    var node = found.node, prev = node.kanban;
+    node.kanban = value;
+    runSync(function(){ return patchTask(node.listId, node.id, {notes: encodeMeta(node)}); })
+      .then(function(){ renderAll(); })
+      .catch(function(){ node.kanban = prev; renderAll(); });
+  }
+  function pullNode(id){
+    if(kanbanUsage() >= wipLimit()){ showToast("At capacity ("+wipLimit()+") \u2014 finish or unblock something first."); return; }
+    setKanban(id, "inprogress");
+  }
+  function blockNode(id){ setKanban(id, "blocked"); }
+  function unblockNode(id){ setKanban(id, "inprogress"); }
+
+  // ---------------- Rendering: Pull Queue ----------------
+  function renderPullQueue(){
+    var wrap = document.getElementById("pullQueueGroups"); wrap.innerHTML="";
+    document.getElementById("wipLimitInput").value = wipLimit();
+    document.getElementById("wipUsage").textContent = kanbanUsage()+"/"+wipLimit();
+    document.getElementById("velocityStat").textContent = weeklyVelocity()+" pts/wk";
+
     var all = flattenAll().filter(function(e){ return e.node.level>1 && e.node.status!=="done"; });
-    order.forEach(function(p){
-      var items = all.filter(function(e){ return (e.node.priority||"med")===p; });
+    var backlog = all.filter(function(e){ return !e.node.kanban; });
+    var inprogress = all.filter(function(e){ return e.node.kanban==="inprogress"; });
+    var blocked = all.filter(function(e){ return e.node.kanban==="blocked"; });
+
+    // Overdue/due-today Backlog items pin above the ranked list regardless of
+    // score -- or of whether they're scored at all. A real deadline doesn't
+    // stop mattering just because a task was never WSJF'd.
+    var pinned = backlog.filter(function(e){ return e.node.dueDate && e.node.dueDate<=todayISO(); });
+    var pinnedIds = {}; pinned.forEach(function(e){ pinnedIds[e.node.id]=true; });
+    var ranked = backlog.filter(function(e){ return !pinnedIds[e.node.id] && wsjfScore(e.node)!=null; })
+      .sort(function(a,b){ return wsjfScore(b.node)-wsjfScore(a.node); });
+
+    function section(title, items, rowFn){
       if(items.length===0) return;
-      var h=document.createElement("div"); h.className="ctx-group-title"; h.textContent=labels[p]+" \u00b7 "+items.length; wrap.appendChild(h);
+      var h=document.createElement("div"); h.className="ctx-group-title"; h.textContent=title+" \u00b7 "+items.length; wrap.appendChild(h);
       var ledger=document.createElement("div"); ledger.className="ledger";
-      items.sort(function(a,b){
-        return (a.node.dueDate||"9999") < (b.node.dueDate||"9999") ? -1:1;
-      }).forEach(function(e){ ledger.appendChild(buildLedgerRow(e)); });
+      items.forEach(function(e){ ledger.appendChild(rowFn(e)); });
       wrap.appendChild(ledger);
-    });
-    if(wrap.children.length===0) wrap.innerHTML = '<div class="empty-hint">No tasks yet.</div>';
+    }
+    function actionRow(e, label, cls, action){
+      var row = buildLedgerRow(e);
+      var btn = document.createElement("button"); btn.className="btn small "+cls; btn.textContent=label;
+      if(label==="Pull" && kanbanUsage()>=wipLimit()) btn.disabled = true;
+      btn.addEventListener("click", function(ev){ ev.stopPropagation(); action(e.node.id); });
+      row.appendChild(btn);
+      return row;
+    }
+
+    section("Due now", pinned, function(e){ return actionRow(e,"Pull","",pullNode); });
+    section("Backlog (by WSJF)", ranked, function(e){ return actionRow(e,"Pull","",pullNode); });
+    section("In Progress", inprogress, function(e){ return actionRow(e,"Block","secondary",blockNode); });
+    section("Blocked", blocked, function(e){ return actionRow(e,"Unblock","",unblockNode); });
+    if(wrap.children.length===0) wrap.innerHTML = '<div class="empty-hint">Nothing scored yet. Open a task and set Value/Time Criticality/Risk/Size to add it to the queue.</div>';
   }
 
   // ---------------- Rendering: Completed ----------------
@@ -1123,7 +1206,7 @@
     if(!found) return;
     if(found.node.level >= 3){ showToast("Checklist items don't open a separate editor \u2014 use \u201c+ Add checklist item\u201d"); return; }
     editingNodeId = null; editingIsNew = true; editingParentId = parentId;
-    var blank = {title:"", status:"todo", priority:"med", dueDate:null, context:null, notesFree:"", recurrence:null, level: found.node.level+1, subitems:[], children:[]};
+    var blank = {title:"", status:"todo", value:null, timecrit:null, risk:null, size:null, kanban:null, dueDate:null, context:null, notesFree:"", recurrence:null, level: found.node.level+1, subitems:[], children:[]};
     populateSheet(blank);
     showOverlay("editOverlay");
   }
@@ -1146,7 +1229,10 @@
     document.getElementById("fTime").value = node.dueTime || "";
     document.getElementById("fNotes").value = node.notesFree || "";
     setSegmented("status", node.status || "todo");
-    setSegmented("priority", node.priority || "med");
+    document.getElementById("fValue").value = node.value!=null ? String(node.value) : "";
+    document.getElementById("fTimecrit").value = node.timecrit!=null ? String(node.timecrit) : "";
+    document.getElementById("fRisk").value = node.risk!=null ? String(node.risk) : "";
+    document.getElementById("fSize").value = node.size!=null ? String(node.size) : "";
     renderContextChips(node.context);
     document.getElementById("fContextCustom").value = "";
     updateRecurUI();
@@ -1156,7 +1242,7 @@
     document.getElementById("fDue").parentElement.parentElement.style.display = isLvl1 ? "none":"block";
     document.getElementById("fContextChips").parentElement.style.display = isLvl1 ? "none":"block";
     document.getElementById("fRecurSwitch").parentElement.parentElement.style.display = isLvl1 ? "none":"block";
-    document.querySelectorAll('.seg-btn[data-priority]')[0].parentElement.parentElement.style.display = isLvl1?"none":"block";
+    document.getElementById("fWsjfField").style.display = isLvl1 ? "none":"block";
 
     var showSubitems = node.level===3;
     document.getElementById("fSubitemsField").style.display = showSubitems ? "block":"none";
@@ -1197,7 +1283,6 @@
     return sel ? sel.getAttribute(attr) : (kind==="status"?"todo":"med");
   }
   document.querySelectorAll('.seg-btn[data-status]').forEach(function(b){ b.addEventListener("click", function(){ setSegmented("status", b.getAttribute("data-status")); }); });
-  document.querySelectorAll('.seg-btn[data-priority]').forEach(function(b){ b.addEventListener("click", function(){ setSegmented("priority", b.getAttribute("data-priority")); }); });
 
   function renderContextChips(selected){
     var wrap = document.getElementById("fContextChips"); wrap.innerHTML="";
@@ -1254,7 +1339,8 @@
     var due = norm.dueDate, dueTime = norm.dueTime;
     var notesFree = document.getElementById("fNotes").value;
     var status = getSegmented("status");
-    var priority = getSegmented("priority");
+    function selInt(id){ var v=document.getElementById(id).value; return v===""?null:parseInt(v,10); }
+    var value=selInt("fValue"), timecrit=selInt("fTimecrit"), risk=selInt("fRisk"), size=selInt("fSize");
     var context = getSelectedContext();
     var rec = currentEditRec ? {freq:currentEditRec.freq, n:currentEditRec.n||1} : null;
     var subitems = currentSubitems.filter(function(s){ return s.title.trim().length>0; });
@@ -1271,14 +1357,15 @@
       var listId = editingLevel===2 ? editingParentId : parentFound.node.listId;
       var parentTaskId = editingLevel===3 ? editingParentId : null;
       var body = {title:title, notes:""};
-      var tempNode = {title:title, level:editingLevel, priority:priority, context:context, recurrence:rec, notesFree:notesFree, subitems:subitems};
+      var tempNode = {title:title, level:editingLevel, value:value, timecrit:timecrit, risk:risk, size:size, context:context, recurrence:rec, notesFree:notesFree, subitems:subitems};
       body.notes = encodeMeta(tempNode);
       if(status==="done") body.status = "completed";
       if(due) body.due = encodeDue(due, dueTime);
       runSync(function(){ return insertTask(listId, body, parentTaskId); }).then(function(created){
         var newNode = {
           id:created.id, listId:listId, parentId:parentTaskId, title:title,
-          status: status==="done"?"done":"todo", priority:priority, context:context, recurrence:rec,
+          status: status==="done"?"done":"todo", value:value, timecrit:timecrit, risk:risk, size:size, kanban:null,
+          context:context, recurrence:rec,
           subitems:subitems, notesFree:notesFree, dueDate:due, dueTime:dueTime, position:created.position||"", level:editingLevel, children:[]
         };
         if(editingLevel===2){ parentFound.node.children.push(newNode); state.expanded[editingParentId]=true; }
@@ -1297,11 +1384,14 @@
         } else { closeSheet(); }
         return;
       }
-      var updated = {title:title, level:node.level, priority:priority, context:context, recurrence:rec, notesFree:notesFree, subitems:subitems};
+      // kanban isn't edited from this sheet (only via the Pull Queue's
+      // Pull/Block/Unblock actions) -- carry the existing value forward so
+      // an unrelated edit here can't silently un-pull an in-progress task.
+      var updated = {title:title, level:node.level, value:value, timecrit:timecrit, risk:risk, size:size, kanban:node.kanban, context:context, recurrence:rec, notesFree:notesFree, subitems:subitems};
       var patchBody = {title:title, notes: encodeMeta(updated), status: status==="done" ? "completed":"needsAction"};
       patchBody.due = due ? encodeDue(due, dueTime) : null;
       runSync(function(){ return patchTask(node.listId, node.id, patchBody); }).then(function(){
-        node.title=title; node.status = status; node.priority=priority; node.context=context;
+        node.title=title; node.status = status; node.value=value; node.timecrit=timecrit; node.risk=risk; node.size=size; node.context=context;
         node.recurrence=rec; node.notesFree=notesFree; node.subitems=subitems; node.dueDate=due; node.dueTime=dueTime;
         closeSheet(); renderAll();
       }).catch(function(){});
@@ -1351,7 +1441,7 @@
       var statusMark = e.node.status==="done" ? "[x]" : "[ ]";
       var bits = [indent+e.num+". "+statusMark+" "+e.node.title];
       var meta=[];
-      if(e.node.priority && e.node.priority!=="med") meta.push("priority:"+e.node.priority);
+      if(wsjfScore(e.node)!=null) meta.push("wsjf:"+wsjfScore(e.node).toFixed(1));
       if(e.node.context) meta.push("@"+e.node.context);
       if(e.node.dueDate) meta.push("due:"+e.node.dueDate+(e.node.dueTime?(" "+e.node.dueTime):""));
       if(e.node.recurrence) meta.push(recurSummary(e.node.recurrence));
@@ -1377,7 +1467,7 @@
   }
 
   function renderAll(){
-    renderQuickAddOptions(); renderProjectCards(); renderDueList(); renderTree(); renderPlanner(); renderContextView(); renderPriorityGroups(); renderCompletedList();
+    renderQuickAddOptions(); renderProjectCards(); renderDueList(); renderTree(); renderPlanner(); renderContextView(); renderPullQueue(); renderCompletedList();
   }
 
   // ---------------- Wiring ----------------
@@ -1393,7 +1483,7 @@
     var parent = findNode(sel.value);
     if(!parent) return;
     runSync(function(){ return insertTask(parent.node.id, {title:title, notes:""}, null); }).then(function(created){
-      parent.node.children.push({id:created.id, listId:parent.node.id, parentId:null, title:title, status:"todo", priority:"med", context:null, recurrence:null, subitems:[], notesFree:"", dueDate:null, dueTime:null, position:created.position||"", level:2, children:[]});
+      parent.node.children.push({id:created.id, listId:parent.node.id, parentId:null, title:title, status:"todo", value:null, timecrit:null, risk:null, size:null, kanban:null, context:null, recurrence:null, subitems:[], notesFree:"", dueDate:null, dueTime:null, position:created.position||"", level:2, children:[]});
       state.expanded[parent.node.id]=true;
       input.value=""; renderAll(); showToast("Added to "+parent.node.title);
     }).catch(function(){});
@@ -1409,6 +1499,8 @@
     setTimeout(function(){ openNewChildSheet(id); }, 250);
   });
   document.getElementById("editOverlay").addEventListener("click", function(ev){ if(ev.target.id==="editOverlay") closeSheet(); });
+
+  document.getElementById("wipLimitInput").addEventListener("change", function(ev){ setWipLimit(parseInt(ev.target.value,10)||3); renderPullQueue(); });
 
   document.getElementById("prevWeekBtn").addEventListener("click", function(){ weekOffset--; renderPlanner(); });
   document.getElementById("nextWeekBtn").addEventListener("click", function(){ weekOffset++; renderPlanner(); });

@@ -984,6 +984,8 @@
     body.appendChild(title); body.appendChild(crumb);
     var right = document.createElement("div");
     right.className = "lr-right";
+    var wsjf = wsjfScore(node);
+    if(wsjf!=null) right.appendChild(makeChip("WSJF "+wsjf.toFixed(1), "pri-med"));
     if(node.context){ var chip=document.createElement("span"); chip.className="chip ctx"; chip.textContent="@"+node.context; right.appendChild(chip); }
     if(node.dueDate){ var d=document.createElement("span"); d.className="lr-date"+(overdue?" overdue":""); d.textContent=fmtDue(node.dueDate, node.dueTime); right.appendChild(d); }
     row.appendChild(check); row.appendChild(body); row.appendChild(right);

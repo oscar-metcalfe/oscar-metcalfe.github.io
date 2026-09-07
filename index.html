@@ -251,6 +251,21 @@
   .chip-opt.selected{background:var(--slate-dim); color:var(--slate); border-color:var(--slate);}
   .rec-row{display:flex; align-items:center; gap:8px;}
   .rec-row select, .rec-row input{width:auto; flex:1;}
+  .score-grid-wrap{overflow-x:auto;}
+  .score-grid{width:100%; border-collapse:collapse; font-size:0.78rem; min-width:820px;}
+  .score-grid th{
+    font-family:var(--mono); font-size:0.6rem; text-transform:uppercase; letter-spacing:0.04em;
+    color:var(--text-dim); text-align:left; padding:4px 6px; border-bottom:1px solid var(--rule); white-space:nowrap;
+  }
+  .score-grid td{padding:3px 5px; border-bottom:1px solid var(--rule); vertical-align:middle;}
+  .score-grid tr.done-row{opacity:0.5;}
+  .score-grid td.sg-num{font-family:var(--mono); font-size:0.66rem; color:var(--text-dim); white-space:nowrap;}
+  .score-grid td.sg-title{min-width:140px;}
+  .score-grid td.sg-wsjf{font-family:var(--mono); font-size:0.74rem; white-space:nowrap; text-align:right;}
+  .score-grid input[type=text], .score-grid input[type=date], .score-grid select{
+    width:100%; font-family:var(--sans); font-size:0.74rem; padding:2px 3px; border:1px solid var(--rule);
+    border-radius:4px; background:#fff; color:var(--text);
+  }
   .switch{
     position:relative; width:38px; height:22px; background:var(--paper-dim-2); border-radius:11px;
     flex:0 0 auto; cursor:pointer; border:1px solid var(--rule);
@@ -307,6 +322,13 @@
     <div class="brand">Ledger<small>Google Tasks edition</small></div>
     <div class="header-actions">
       <span class="save-indicator" id="saveIndicator" title="Sync status"></span>
+      <select class="icon-btn" id="sortModeSelect" style="display:none;" title="Sort order">
+        <option value="wsjf-desc">Sort: WSJF &darr;</option>
+        <option value="wsjf-asc">Sort: WSJF &uarr;</option>
+        <option value="number">Sort: Task #</option>
+        <option value="alpha-asc">Sort: A&rarr;Z</option>
+        <option value="alpha-desc">Sort: Z&rarr;A</option>
+      </select>
       <button class="icon-btn" id="refreshBtn" style="display:none;">Refresh</button>
       <button class="icon-btn" id="exportBtn" style="display:none;">Export</button>
       <button class="icon-btn" id="disconnectBtn" style="display:none;">Disconnect</button>
@@ -318,6 +340,7 @@
     <button data-view="planner">Planner</button>
     <button data-view="context">By Context</button>
     <button data-view="pullqueue">Pull Queue</button>
+    <button data-view="grid">Grid</button>
     <button data-view="completed">Completed</button>
   </nav>
 </header>
@@ -402,6 +425,20 @@
       <span class="pn-label" id="velocityStat"></span>
     </div>
     <div id="pullQueueGroups"></div>
+  </section>
+
+  <section class="view" id="view-grid">
+    <div class="score-grid-wrap">
+      <table class="score-grid" id="scoreGridTable">
+        <thead>
+          <tr>
+            <th>#</th><th>Task</th><th>Project</th><th>Status</th><th>Context</th><th>Due</th>
+            <th>Value</th><th>Time Crit</th><th>Risk/Opp</th><th>Size</th><th>WSJF</th>
+          </tr>
+        </thead>
+        <tbody id="scoreGridBody"></tbody>
+      </table>
+    </div>
   </section>
 
   <section class="view" id="view-completed">
@@ -533,6 +570,7 @@
   var LS_CLIENT_ID = "gt-tracker-client-id";
   var LS_EVER_AUTHED = "gt-tracker-ever-authed";
   var LS_WIP_LIMIT = "gt-tracker-wip-limit";
+  var LS_SORT_MODE = "gt-tracker-sort-mode";
   var API_BASE = "https://tasks.googleapis.com/tasks/v1";
   var DEFAULT_CONTEXTS = ["errands","home","computer","calls","waiting-for"];
   var META_MARK = "\u00a7meta", SUB_MARK = "\u00a7subtasks", NOTES_MARK = "\u00a7notes";
@@ -541,7 +579,8 @@
     clientId: localStorage.getItem(LS_CLIENT_ID) || "",
     lists: [],          // array of level-1 nodes: {id, level:1, title, children:[level2...]}
     contextTags: DEFAULT_CONTEXTS.slice(),
-    expanded: {}
+    expanded: {},
+    sortMode: localStorage.getItem(LS_SORT_MODE) || "wsjf-desc"
   };
 
   var tokenClient = null;
@@ -622,6 +661,46 @@
   function wsjfScore(node){
     if(node.value==null || node.timecrit==null || node.risk==null || !node.size) return null;
     return (node.value + node.timecrit + node.risk) / node.size;
+  }
+
+  // One sort control, shared by every task list in the app. "number" means
+  // "whatever order they're already in" -- task number is itself derived
+  // from position, so for the tree that's a no-op; for flat cross-project
+  // lists it's flattenAll()'s natural top-to-bottom walk order, compared
+  // numerically component-by-component (so "10" sorts after "2", not before).
+  function compareTaskNumbers(numA, numB){
+    var pa=numA.split("."), pb=numB.split(".");
+    for(var i=0;i<Math.max(pa.length,pb.length);i++){
+      var na=parseInt(pa[i]||"0",10), nb=parseInt(pb[i]||"0",10);
+      if(na!==nb) return na-nb;
+    }
+    return 0;
+  }
+  function compareNodesByMode(a, b, mode){
+    if(mode==="alpha-asc" || mode==="alpha-desc"){
+      var ta=(a.title||"").toLowerCase(), tb=(b.title||"").toLowerCase();
+      var c = ta<tb ? -1 : ta>tb ? 1 : 0;
+      return mode==="alpha-desc" ? -c : c;
+    }
+    var sa=wsjfScore(a), sb=wsjfScore(b);
+    if(sa==null && sb==null) return 0;
+    if(sa==null) return 1;   // unscored sinks to the bottom either direction
+    if(sb==null) return -1;
+    var c2 = sa - sb;
+    return mode==="wsjf-asc" ? c2 : -c2;
+  }
+  // For flattenAll()-derived {node, num, ...} entries.
+  function sortEntriesByMode(entries, mode){
+    if(mode==="number") entries.sort(function(a,b){ return compareTaskNumbers(a.num, b.num); });
+    else entries.sort(function(a,b){ return compareNodesByMode(a.node, b.node, mode); });
+    return entries;
+  }
+  // For raw tree-children node arrays (no num/entry wrapper).
+  function sortNodesByMode(nodes, mode){
+    if(mode==="number") return nodes; // task number IS the tree's own position order
+    nodes = nodes.slice();
+    nodes.sort(function(a,b){ return compareNodesByMode(a,b,mode); });
+    return nodes;
   }
 
   function controlNumbers(nodes, prefix){
@@ -960,7 +1039,7 @@
     wrap.innerHTML = "";
     var wkEnd = isoFromDate(addDays(new Date(),7));
     var items = flattenAll().filter(function(e){ return e.node.dueDate && e.node.status!=="done" && e.node.dueDate<=wkEnd; });
-    items.sort(function(a,b){ return a.node.dueDate < b.node.dueDate ? -1:1; });
+    sortEntriesByMode(items, state.sortMode);
     if(items.length===0){ wrap.innerHTML = '<div class="empty-hint">Nothing due in the next 7 days.</div>'; return; }
     items.forEach(function(e){ wrap.appendChild(buildLedgerRow(e)); });
   }
@@ -998,9 +1077,10 @@
     var root = document.getElementById("treeRoot");
     root.innerHTML = "";
     if(state.lists.length===0){ root.innerHTML = '<div class="empty-hint">No projects yet. Tap "+ Project" to start.</div>'; return; }
-    var numbered = controlNumbers(state.lists, "");
+    var shown = sortNodesByMode(state.lists, state.sortMode);
+    var numbered = controlNumbers(shown, "");
     var byId = {}; numbered.forEach(function(e){ byId[e.node.id]=e.num; });
-    state.lists.forEach(function(p){ root.appendChild(buildNodeEl(p, byId[p.id])); });
+    shown.forEach(function(p){ root.appendChild(buildNodeEl(p, byId[p.id])); });
   }
 
   function buildNodeEl(node, num){
@@ -1040,7 +1120,7 @@
 
     if(hasChildren && isExpanded){
       var childWrap = document.createElement("div"); childWrap.className="node-children";
-      var shown = visibleChildren(node);
+      var shown = sortNodesByMode(visibleChildren(node), state.sortMode);
       var numbered = controlNumbers(shown, num);
       var byId = {}; numbered.forEach(function(e){ byId[e.node.id]=e.num; });
       shown.forEach(function(c){ childWrap.appendChild(buildNodeEl(c, byId[c.id])); });
@@ -1091,12 +1171,14 @@
       block.appendChild(head);
       var body = document.createElement("div"); body.className="day-body";
       var dayItems = all.filter(function(e){ return e.node.dueDate===iso; });
+      sortEntriesByMode(dayItems, state.sortMode);
       if(dayItems.length===0){ var empty=document.createElement("div"); empty.className="day-empty"; empty.textContent="\u2014"; body.appendChild(empty); }
       else { dayItems.forEach(function(e){ body.appendChild(buildLedgerRow(e)); }); }
       block.appendChild(body); container.appendChild(block);
     }
     var unschedWrap = document.getElementById("unscheduledList"); unschedWrap.innerHTML="";
     var unsched = flattenAll().filter(function(e){ return !e.node.dueDate && e.node.status!=="done" && (!e.node.children || e.node.children.length===0) && e.node.level>1; });
+    sortEntriesByMode(unsched, state.sortMode);
     if(unsched.length===0){ unschedWrap.innerHTML = '<div class="empty-hint">Nothing unscheduled.</div>'; }
     else { unsched.forEach(function(e){ unschedWrap.appendChild(buildLedgerRow(e)); }); }
   }
@@ -1111,9 +1193,7 @@
     Object.keys(groups).sort().forEach(function(tag){
       var h=document.createElement("div"); h.className="ctx-group-title"; h.textContent="@"+tag+" \u00b7 "+groups[tag].length; wrap.appendChild(h);
       var ledger=document.createElement("div"); ledger.className="ledger";
-      groups[tag].sort(function(a,b){
-        return (a.node.dueDate||"9999") < (b.node.dueDate||"9999") ? -1:1;
-      }).forEach(function(e){ ledger.appendChild(buildLedgerRow(e)); });
+      sortEntriesByMode(groups[tag], state.sortMode).forEach(function(e){ ledger.appendChild(buildLedgerRow(e)); });
       wrap.appendChild(ledger);
     });
   }
@@ -1168,8 +1248,11 @@
     // stop mattering just because a task was never WSJF'd.
     var pinned = backlog.filter(function(e){ return e.node.dueDate && e.node.dueDate<=todayISO(); });
     var pinnedIds = {}; pinned.forEach(function(e){ pinnedIds[e.node.id]=true; });
-    var ranked = backlog.filter(function(e){ return !pinnedIds[e.node.id] && wsjfScore(e.node)!=null; })
-      .sort(function(a,b){ return wsjfScore(b.node)-wsjfScore(a.node); });
+    var ranked = backlog.filter(function(e){ return !pinnedIds[e.node.id] && wsjfScore(e.node)!=null; });
+    sortEntriesByMode(ranked, state.sortMode);
+    sortEntriesByMode(pinned, state.sortMode);
+    sortEntriesByMode(inprogress, state.sortMode);
+    sortEntriesByMode(blocked, state.sortMode);
 
     function section(title, items, rowFn){
       if(items.length===0) return;
@@ -1198,8 +1281,105 @@
   function renderCompletedList(){
     var wrap = document.getElementById("completedList"); wrap.innerHTML="";
     var items = flattenAll().filter(function(e){ return e.node.level>1 && e.node.status==="done"; });
+    sortEntriesByMode(items, state.sortMode);
     if(items.length===0){ wrap.innerHTML = '<div class="empty-hint">Nothing completed yet.</div>'; return; }
     items.forEach(function(e){ wrap.appendChild(buildLedgerRow(e)); });
+  }
+
+  // ---------------- Rendering: Score Grid ----------------
+  // Every field editable inline, one row per task -- reuses the same
+  // patchTask/encodeMeta path the edit sheet uses, so the two stay in sync.
+  // Recurrence, checklist, and free notes are structured/multi-line and
+  // don't fit a compact row -- still editable via the existing edit sheet.
+  var FIB_OPTS = ["","1","2","3","5","8","13"];
+  function makeFibSelect(node, field){
+    var sel = document.createElement("select");
+    FIB_OPTS.forEach(function(v){
+      var opt = document.createElement("option"); opt.value=v; opt.textContent = v===""?"—":v;
+      if(String(node[field]==null?"":node[field])===v) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    sel.addEventListener("change", function(){
+      gridUpdate(node.id, function(n){ n[field] = sel.value===""?null:parseInt(sel.value,10); });
+    });
+    return sel;
+  }
+  function gridUpdate(nodeId, mutator){
+    var found = findNode(nodeId);
+    if(!found) return;
+    var node = found.node;
+    var snapshot = Object.assign({}, node);
+    mutator(node);
+    var patchBody = {title:node.title, notes:encodeMeta(node), status: node.status==="done" ? "completed":"needsAction"};
+    patchBody.due = node.dueDate ? encodeDue(node.dueDate, node.dueTime) : null;
+    runSync(function(){ return patchTask(node.listId, node.id, patchBody); })
+      .then(function(){ renderAll(); })
+      .catch(function(){ Object.assign(node, snapshot); renderAll(); });
+  }
+  function renderScoreGrid(){
+    var tbody = document.getElementById("scoreGridBody");
+    tbody.innerHTML = "";
+    var entries = flattenAll().filter(function(e){ return e.node.level>1; });
+    sortEntriesByMode(entries, state.sortMode);
+    if(entries.length===0){ tbody.innerHTML = '<tr><td colspan="11" class="empty-hint">No tasks yet.</td></tr>'; return; }
+    entries.forEach(function(e){
+      var node = e.node;
+      var tr = document.createElement("tr");
+      if(node.status==="done") tr.className = "done-row";
+
+      var tdNum = document.createElement("td"); tdNum.className="sg-num"; tdNum.textContent = e.num;
+
+      var tdTitle = document.createElement("td"); tdTitle.className="sg-title";
+      var titleInp = document.createElement("input"); titleInp.type="text"; titleInp.value = node.title;
+      titleInp.addEventListener("change", function(){
+        gridUpdate(node.id, function(n){ n.title = titleInp.value.trim() || n.title; });
+      });
+      tdTitle.appendChild(titleInp);
+
+      var tdProj = document.createElement("td"); tdProj.textContent = e.crumb[0] || "";
+
+      var tdStatus = document.createElement("td");
+      var statusSel = document.createElement("select");
+      [["todo","To do"],["inprogress","In progress"],["done","Done"]].forEach(function(pair){
+        var opt = document.createElement("option"); opt.value=pair[0]; opt.textContent=pair[1];
+        if(node.status===pair[0]) opt.selected = true;
+        statusSel.appendChild(opt);
+      });
+      statusSel.addEventListener("change", function(){ gridUpdate(node.id, function(n){ n.status = statusSel.value; }); });
+      tdStatus.appendChild(statusSel);
+
+      var tdContext = document.createElement("td");
+      var ctxSel = document.createElement("select");
+      var noneOpt = document.createElement("option"); noneOpt.value=""; noneOpt.textContent="—";
+      if(!node.context) noneOpt.selected = true;
+      ctxSel.appendChild(noneOpt);
+      state.contextTags.forEach(function(c){
+        var opt = document.createElement("option"); opt.value=c; opt.textContent=c;
+        if(node.context===c) opt.selected = true;
+        ctxSel.appendChild(opt);
+      });
+      ctxSel.addEventListener("change", function(){ gridUpdate(node.id, function(n){ n.context = ctxSel.value || null; }); });
+      tdContext.appendChild(ctxSel);
+
+      var tdDue = document.createElement("td");
+      var dueInp = document.createElement("input"); dueInp.type="date"; dueInp.value = node.dueDate || "";
+      dueInp.addEventListener("change", function(){
+        gridUpdate(node.id, function(n){ n.dueDate = dueInp.value || null; if(!dueInp.value) n.dueTime=null; });
+      });
+      tdDue.appendChild(dueInp);
+
+      var tdValue = document.createElement("td"); tdValue.appendChild(makeFibSelect(node,"value"));
+      var tdTimecrit = document.createElement("td"); tdTimecrit.appendChild(makeFibSelect(node,"timecrit"));
+      var tdRisk = document.createElement("td"); tdRisk.appendChild(makeFibSelect(node,"risk"));
+      var tdSize = document.createElement("td"); tdSize.appendChild(makeFibSelect(node,"size"));
+
+      var tdWsjf = document.createElement("td"); tdWsjf.className="sg-wsjf";
+      var wsjf = wsjfScore(node);
+      tdWsjf.textContent = wsjf!=null ? wsjf.toFixed(1) : "—";
+
+      [tdNum,tdTitle,tdProj,tdStatus,tdContext,tdDue,tdValue,tdTimecrit,tdRisk,tdSize,tdWsjf].forEach(function(td){ tr.appendChild(td); });
+      tbody.appendChild(tr);
+    });
   }
 
   // ---------------- Edit sheet ----------------
@@ -1478,7 +1658,7 @@
   }
 
   function renderAll(){
-    renderQuickAddOptions(); renderProjectCards(); renderDueList(); renderTree(); renderPlanner(); renderContextView(); renderPullQueue(); renderCompletedList();
+    renderQuickAddOptions(); renderProjectCards(); renderDueList(); renderTree(); renderPlanner(); renderContextView(); renderPullQueue(); renderScoreGrid(); renderCompletedList();
   }
 
   // ---------------- Wiring ----------------
@@ -1529,6 +1709,16 @@
 
   document.getElementById("refreshBtn").addEventListener("click", function(){ reloadAndRender(); });
 
+  (function(){
+    var sortSel = document.getElementById("sortModeSelect");
+    sortSel.value = state.sortMode;
+    sortSel.addEventListener("change", function(){
+      state.sortMode = sortSel.value;
+      localStorage.setItem(LS_SORT_MODE, state.sortMode);
+      renderAll();
+    });
+  })();
+
   document.getElementById("disconnectBtn").addEventListener("click", function(){
     showConfirm("Sign out of Google Tasks on this device? Your tasks stay safe in Google Tasks \u2014 this just forgets the local sign-in.", function(){
       accessToken=null; tokenExpiryMs=0; localStorage.removeItem(LS_EVER_AUTHED);
@@ -1562,6 +1752,7 @@
     document.getElementById("mainContent").style.display = which==="app" ? "block":"none";
     document.getElementById("mainTabs").style.display = which==="app" ? "flex":"none";
     document.getElementById("fabAdd").style.display = which==="app" ? "block":"none";
+    document.getElementById("sortModeSelect").style.display = which==="app" ? "inline-block":"none";
     document.getElementById("refreshBtn").style.display = which==="app" ? "inline-block":"none";
     document.getElementById("exportBtn").style.display = which==="app" ? "inline-block":"none";
     document.getElementById("disconnectBtn").style.display = which==="app" ? "inline-block":"none";

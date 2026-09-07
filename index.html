@@ -610,6 +610,12 @@
     return {done:done, total:total};
   }
 
+  // Done children stay in rollup()'s counts but drop out of the Projects
+  // tab's tree -- the Completed tab is already where finished work lives.
+  function visibleChildren(node){
+    return (node.children||[]).filter(function(c){ return c.status!=="done"; });
+  }
+
   // WSJF = (Value + Time Criticality + Risk/Opportunity) / Job Size. null if
   // any of the four inputs is unset -- an unscored task is excluded from the
   // Pull Queue rather than shown at a misleading default rank.
@@ -999,7 +1005,7 @@
     var wrap = document.createElement("div");
     wrap.className = "node"; wrap.setAttribute("data-node-id", node.id);
     var row = document.createElement("div"); row.className = "node-row";
-    var hasChildren = node.children && node.children.length>0;
+    var hasChildren = visibleChildren(node).length>0;
     var isExpanded = !!state.expanded[node.id];
     var caret = document.createElement("div");
     caret.className = "toggle-caret";
@@ -1017,6 +1023,8 @@
     title.textContent = node.title;
     mainWrap.appendChild(title);
     var sub = document.createElement("div"); sub.className="node-sub";
+    var wsjf = wsjfScore(node);
+    if(wsjf!=null) sub.appendChild(makeChip("WSJF "+wsjf.toFixed(1), "pri-med"));
     if(node.context) sub.appendChild(makeChip("@"+node.context,"ctx"));
     if(node.dueDate) sub.appendChild(makeChip(fmtDue(node.dueDate, node.dueTime), (node.dueDate<todayISO() && node.status!=="done") ? "pri-high":"repeat"));
     if(node.recurrence) sub.appendChild(makeChip(recurSummary(node.recurrence),"repeat"));
@@ -1030,9 +1038,10 @@
 
     if(hasChildren && isExpanded){
       var childWrap = document.createElement("div"); childWrap.className="node-children";
-      var numbered = controlNumbers(node.children, num);
+      var shown = visibleChildren(node);
+      var numbered = controlNumbers(shown, num);
       var byId = {}; numbered.forEach(function(e){ byId[e.node.id]=e.num; });
-      node.children.forEach(function(c){ childWrap.appendChild(buildNodeEl(c, byId[c.id])); });
+      shown.forEach(function(c){ childWrap.appendChild(buildNodeEl(c, byId[c.id])); });
       wrap.appendChild(childWrap);
     }
     // level-3 subitem checklist (not a real API child, just inline rows)

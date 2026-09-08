@@ -208,6 +208,13 @@
   .day-body{padding:2px 8px;}
   .day-empty{padding:9px 3px; font-family:var(--mono); font-size:0.66rem; color:var(--text-dim);}
 
+  /* Pull Queue: three status columns (to pull / pulled / completed this
+     week) side by side once there's room; stacked on narrow screens like
+     everything else in this mobile-first layout. */
+  .pq-columns{display:flex; flex-direction:column; gap:16px;}
+  .pq-col{flex:1 1 0; min-width:0;}
+  @media (min-width:720px){ .pq-columns{flex-direction:row; align-items:flex-start;} }
+
   .ctx-group-title{
     font-family:var(--mono); font-size:0.72rem; text-transform:lowercase; letter-spacing:0.03em;
     color:var(--slate); background:var(--slate-dim); display:inline-block; padding:3px 9px;
@@ -251,21 +258,39 @@
   .chip-opt.selected{background:var(--slate-dim); color:var(--slate); border-color:var(--slate);}
   .rec-row{display:flex; align-items:center; gap:8px;}
   .rec-row select, .rec-row input{width:auto; flex:1;}
-  .score-grid-wrap{overflow-x:auto;}
-  .score-grid{width:100%; border-collapse:collapse; font-size:0.78rem; min-width:820px;}
+  /* table-layout:fixed + explicit per-column percentages (summing to
+     100) so the whole grid fits the viewport width with no horizontal
+     scrollbar -- cells clip with ellipsis instead of forcing overflow. */
+  .score-grid-wrap{overflow-x:hidden;}
+  .score-grid{width:100%; table-layout:fixed; border-collapse:collapse; font-size:0.7rem;}
   .score-grid th{
-    font-family:var(--mono); font-size:0.6rem; text-transform:uppercase; letter-spacing:0.04em;
-    color:var(--text-dim); text-align:left; padding:4px 6px; border-bottom:1px solid var(--rule); white-space:nowrap;
+    font-family:var(--mono); font-size:0.56rem; text-transform:uppercase; letter-spacing:0.02em;
+    color:var(--text-dim); text-align:left; padding:4px 3px; border-bottom:1px solid var(--rule);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   }
-  .score-grid td{padding:3px 5px; border-bottom:1px solid var(--rule); vertical-align:middle;}
+  #scoreGridHeadRow th{cursor:pointer; user-select:none;}
+  #scoreGridHeadRow th:hover{color:var(--text);}
+  #scoreGridHeadRow th.sorted{color:var(--slate);}
+  .score-grid td{padding:2px 3px; border-bottom:1px solid var(--rule); vertical-align:middle; overflow:hidden;}
   .score-grid tr.done-row{opacity:0.5;}
-  .score-grid td.sg-num{font-family:var(--mono); font-size:0.66rem; color:var(--text-dim); white-space:nowrap;}
-  .score-grid td.sg-title{min-width:140px;}
-  .score-grid td.sg-wsjf{font-family:var(--mono); font-size:0.74rem; white-space:nowrap; text-align:right;}
+  .score-grid td.sg-num{font-family:var(--mono); font-size:0.6rem; color:var(--text-dim); white-space:nowrap; text-overflow:ellipsis;}
+  .score-grid td.sg-title{overflow:hidden; text-overflow:ellipsis;}
+  .score-grid td.sg-wsjf{font-family:var(--mono); font-size:0.68rem; white-space:nowrap; text-align:right;}
   .score-grid input[type=text], .score-grid input[type=date], .score-grid select{
-    width:100%; font-family:var(--sans); font-size:0.74rem; padding:2px 3px; border:1px solid var(--rule);
-    border-radius:4px; background:#fff; color:var(--text);
+    width:100%; max-width:100%; box-sizing:border-box; font-family:var(--sans); font-size:0.64rem; padding:1px 2px;
+    border:1px solid var(--rule); border-radius:3px; background:#fff; color:var(--text);
   }
+  .score-grid th:nth-child(1), .score-grid td:nth-child(1){width:4%;}
+  .score-grid th:nth-child(2), .score-grid td:nth-child(2){width:18%;}
+  .score-grid th:nth-child(3), .score-grid td:nth-child(3){width:11%;}
+  .score-grid th:nth-child(4), .score-grid td:nth-child(4){width:9%;}
+  .score-grid th:nth-child(5), .score-grid td:nth-child(5){width:9%;}
+  .score-grid th:nth-child(6), .score-grid td:nth-child(6){width:10%;}
+  .score-grid th:nth-child(7), .score-grid td:nth-child(7){width:8%;}
+  .score-grid th:nth-child(8), .score-grid td:nth-child(8){width:8%;}
+  .score-grid th:nth-child(9), .score-grid td:nth-child(9){width:8%;}
+  .score-grid th:nth-child(10), .score-grid td:nth-child(10){width:8%;}
+  .score-grid th:nth-child(11), .score-grid td:nth-child(11){width:7%;}
   .switch{
     position:relative; width:38px; height:22px; background:var(--paper-dim-2); border-radius:11px;
     flex:0 0 auto; cursor:pointer; border:1px solid var(--rule);
@@ -424,19 +449,37 @@
       <input type="number" id="wipLimitInput" min="1" style="max-width:70px;">
       <span class="pn-label" id="velocityStat"></span>
     </div>
-    <div id="pullQueueGroups"></div>
+    <div class="pq-columns">
+      <div class="pq-col" id="pullQueueToPull"></div>
+      <div class="pq-col" id="pullQueuePulled"></div>
+      <div class="pq-col" id="pullQueueCompleted"></div>
+    </div>
   </section>
 
   <section class="view" id="view-grid">
     <div class="score-grid-wrap">
       <table class="score-grid" id="scoreGridTable">
         <thead>
+          <tr id="scoreGridHeadRow">
+            <th data-field="num">#</th><th data-field="title">Task</th><th data-field="project">Project</th>
+            <th data-field="status">Status</th><th data-field="context">Context</th><th data-field="due">Due</th>
+            <th data-field="value">Value</th><th data-field="timecrit">Time Crit</th><th data-field="risk">Risk/Opp</th>
+            <th data-field="size">Size</th><th data-field="wsjf">WSJF</th>
+          </tr>
+        </thead>
+        <tbody id="scoreGridBody"></tbody>
+      </table>
+    </div>
+    <h2 class="section-title">Completed<span class="rule"></span></h2>
+    <div class="score-grid-wrap">
+      <table class="score-grid" id="doneGridTable">
+        <thead>
           <tr>
             <th>#</th><th>Task</th><th>Project</th><th>Status</th><th>Context</th><th>Due</th>
             <th>Value</th><th>Time Crit</th><th>Risk/Opp</th><th>Size</th><th>WSJF</th>
           </tr>
         </thead>
-        <tbody id="scoreGridBody"></tbody>
+        <tbody id="doneGridBody"></tbody>
       </table>
     </div>
   </section>
@@ -1233,7 +1276,9 @@
 
   // ---------------- Rendering: Pull Queue ----------------
   function renderPullQueue(){
-    var wrap = document.getElementById("pullQueueGroups"); wrap.innerHTML="";
+    var toPullWrap = document.getElementById("pullQueueToPull"); toPullWrap.innerHTML="";
+    var pulledWrap = document.getElementById("pullQueuePulled"); pulledWrap.innerHTML="";
+    var completedWrap = document.getElementById("pullQueueCompleted"); completedWrap.innerHTML="";
     document.getElementById("wipLimitInput").value = wipLimit();
     document.getElementById("wipUsage").textContent = kanbanUsage()+"/"+wipLimit();
     document.getElementById("velocityStat").textContent = weeklyVelocity()+" pts/wk";
@@ -1254,7 +1299,16 @@
     sortEntriesByMode(inprogress, state.sortMode);
     sortEntriesByMode(blocked, state.sortMode);
 
-    function section(title, items, rowFn){
+    // Same rolling 7-day window weeklyVelocity() already uses -- "this
+    // week" means "completed in the last 7 days," not calendar-week-so-far.
+    var weekCutoff = Date.now() - 7*24*60*60*1000;
+    var completedThisWeek = flattenAll().filter(function(e){
+      var n = e.node;
+      return n.level>1 && n.status==="done" && n.completedAt && new Date(n.completedAt).getTime()>=weekCutoff;
+    });
+    sortEntriesByMode(completedThisWeek, state.sortMode);
+
+    function section(wrap, title, items, rowFn){
       if(items.length===0) return;
       var h=document.createElement("div"); h.className="ctx-group-title"; h.textContent=title+" \u00b7 "+items.length; wrap.appendChild(h);
       var ledger=document.createElement("div"); ledger.className="ledger";
@@ -1270,11 +1324,16 @@
       return row;
     }
 
-    section("Due now", pinned, function(e){ return actionRow(e,"Pull","",pullNode); });
-    section("Backlog (by WSJF)", ranked, function(e){ return actionRow(e,"Pull","",pullNode); });
-    section("In Progress", inprogress, function(e){ return actionRow(e,"Block","secondary",blockNode); });
-    section("Blocked", blocked, function(e){ return actionRow(e,"Unblock","",unblockNode); });
-    if(wrap.children.length===0) wrap.innerHTML = '<div class="empty-hint">Nothing scored yet. Open a task and set Value/Time Criticality/Risk/Size to add it to the queue.</div>';
+    section(toPullWrap, "Due now", pinned, function(e){ return actionRow(e,"Pull","",pullNode); });
+    section(toPullWrap, "Backlog (by WSJF)", ranked, function(e){ return actionRow(e,"Pull","",pullNode); });
+    if(toPullWrap.children.length===0) toPullWrap.innerHTML = '<div class="empty-hint">Nothing scored yet. Open a task and set Value/Time Criticality/Risk/Size to add it to the queue.</div>';
+
+    section(pulledWrap, "In Progress", inprogress, function(e){ return actionRow(e,"Block","secondary",blockNode); });
+    section(pulledWrap, "Blocked", blocked, function(e){ return actionRow(e,"Unblock","",unblockNode); });
+    if(pulledWrap.children.length===0) pulledWrap.innerHTML = '<div class="empty-hint">Nothing pulled yet.</div>';
+
+    section(completedWrap, "Completed this week", completedThisWeek, function(e){ return buildLedgerRow(e); });
+    if(completedWrap.children.length===0) completedWrap.innerHTML = '<div class="empty-hint">Nothing completed in the last 7 days.</div>';
   }
 
   // ---------------- Rendering: Completed ----------------
@@ -1291,7 +1350,7 @@
   // patchTask/encodeMeta path the edit sheet uses, so the two stay in sync.
   // Recurrence, checklist, and free notes are structured/multi-line and
   // don't fit a compact row -- still editable via the existing edit sheet.
-  var FIB_OPTS = ["","1","2","3","5","8","13"];
+  var FIB_OPTS = ["","1","2","3","5","8","13","21","34","55","89","144"];
   function makeFibSelect(node, field){
     var sel = document.createElement("select");
     FIB_OPTS.forEach(function(v){
@@ -1316,70 +1375,137 @@
       .then(function(){ renderAll(); })
       .catch(function(){ Object.assign(node, snapshot); renderAll(); });
   }
-  function renderScoreGrid(){
-    var tbody = document.getElementById("scoreGridBody");
-    tbody.innerHTML = "";
-    var entries = flattenAll().filter(function(e){ return e.node.level>1; });
-    sortEntriesByMode(entries, state.sortMode);
-    if(entries.length===0){ tbody.innerHTML = '<tr><td colspan="11" class="empty-hint">No tasks yet.</td></tr>'; return; }
-    entries.forEach(function(e){
-      var node = e.node;
-      var tr = document.createElement("tr");
-      if(node.status==="done") tr.className = "done-row";
+  // Grid has its own click-to-sort-by-column state, independent of the
+  // app-wide sort-mode dropdown (which still governs every other tab) --
+  // a spreadsheet-style header click is the more natural fit for this
+  // one dense, all-fields-visible table.
+  var LS_GRID_SORT_FIELD = "gt-tracker-grid-sort-field";
+  var LS_GRID_SORT_DIR = "gt-tracker-grid-sort-dir";
+  var GRID_COL_LABELS = {num:"#", title:"Task", project:"Project", status:"Status", context:"Context", due:"Due", value:"Value", timecrit:"Time Crit", risk:"Risk/Opp", size:"Size", wsjf:"WSJF"};
+  var GRID_TEXT_FIELDS = {title:1, project:1, status:1, context:1, due:1}; // default ascending; numeric fields default descending
+  state.gridSort = {
+    field: localStorage.getItem(LS_GRID_SORT_FIELD) || "wsjf",
+    dir: localStorage.getItem(LS_GRID_SORT_DIR) || "desc"
+  };
 
-      var tdNum = document.createElement("td"); tdNum.className="sg-num"; tdNum.textContent = e.num;
-
-      var tdTitle = document.createElement("td"); tdTitle.className="sg-title";
-      var titleInp = document.createElement("input"); titleInp.type="text"; titleInp.value = node.title;
-      titleInp.addEventListener("change", function(){
-        gridUpdate(node.id, function(n){ n.title = titleInp.value.trim() || n.title; });
-      });
-      tdTitle.appendChild(titleInp);
-
-      var tdProj = document.createElement("td"); tdProj.textContent = e.crumb[0] || "";
-
-      var tdStatus = document.createElement("td");
-      var statusSel = document.createElement("select");
-      [["todo","To do"],["inprogress","In progress"],["done","Done"]].forEach(function(pair){
-        var opt = document.createElement("option"); opt.value=pair[0]; opt.textContent=pair[1];
-        if(node.status===pair[0]) opt.selected = true;
-        statusSel.appendChild(opt);
-      });
-      statusSel.addEventListener("change", function(){ gridUpdate(node.id, function(n){ n.status = statusSel.value; }); });
-      tdStatus.appendChild(statusSel);
-
-      var tdContext = document.createElement("td");
-      var ctxSel = document.createElement("select");
-      var noneOpt = document.createElement("option"); noneOpt.value=""; noneOpt.textContent="—";
-      if(!node.context) noneOpt.selected = true;
-      ctxSel.appendChild(noneOpt);
-      state.contextTags.forEach(function(c){
-        var opt = document.createElement("option"); opt.value=c; opt.textContent=c;
-        if(node.context===c) opt.selected = true;
-        ctxSel.appendChild(opt);
-      });
-      ctxSel.addEventListener("change", function(){ gridUpdate(node.id, function(n){ n.context = ctxSel.value || null; }); });
-      tdContext.appendChild(ctxSel);
-
-      var tdDue = document.createElement("td");
-      var dueInp = document.createElement("input"); dueInp.type="date"; dueInp.value = node.dueDate || "";
-      dueInp.addEventListener("change", function(){
-        gridUpdate(node.id, function(n){ n.dueDate = dueInp.value || null; if(!dueInp.value) n.dueTime=null; });
-      });
-      tdDue.appendChild(dueInp);
-
-      var tdValue = document.createElement("td"); tdValue.appendChild(makeFibSelect(node,"value"));
-      var tdTimecrit = document.createElement("td"); tdTimecrit.appendChild(makeFibSelect(node,"timecrit"));
-      var tdRisk = document.createElement("td"); tdRisk.appendChild(makeFibSelect(node,"risk"));
-      var tdSize = document.createElement("td"); tdSize.appendChild(makeFibSelect(node,"size"));
-
-      var tdWsjf = document.createElement("td"); tdWsjf.className="sg-wsjf";
-      var wsjf = wsjfScore(node);
-      tdWsjf.textContent = wsjf!=null ? wsjf.toFixed(1) : "—";
-
-      [tdNum,tdTitle,tdProj,tdStatus,tdContext,tdDue,tdValue,tdTimecrit,tdRisk,tdSize,tdWsjf].forEach(function(td){ tr.appendChild(td); });
-      tbody.appendChild(tr);
+  function compareGridField(entryA, entryB, field){
+    var a = entryA.node, b = entryB.node;
+    if(field==="num") return compareTaskNumbers(entryA.num, entryB.num);
+    if(field==="title"){
+      var ta=(a.title||"").toLowerCase(), tb=(b.title||"").toLowerCase();
+      return ta<tb ? -1 : ta>tb ? 1 : 0;
+    }
+    if(field==="project"){
+      var pa=(entryA.crumb[0]||"").toLowerCase(), pb=(entryB.crumb[0]||"").toLowerCase();
+      return pa<pb ? -1 : pa>pb ? 1 : 0;
+    }
+    if(field==="status") return (a.status||"").localeCompare(b.status||"");
+    if(field==="context"){
+      var ca=a.context||"", cb=b.context||"";
+      if(!ca && !cb) return 0; if(!ca) return 1; if(!cb) return -1;
+      return ca<cb ? -1 : ca>cb ? 1 : 0;
+    }
+    if(field==="due"){
+      var da=a.dueDate||"", db=b.dueDate||"";
+      if(!da && !db) return 0; if(!da) return 1; if(!db) return -1;
+      return da<db ? -1 : da>db ? 1 : 0;
+    }
+    if(field==="value" || field==="timecrit" || field==="risk" || field==="size"){
+      var va=a[field], vb=b[field];
+      if(va==null && vb==null) return 0; if(va==null) return 1; if(vb==null) return -1;
+      return va-vb;
+    }
+    if(field==="wsjf"){
+      var sa=wsjfScore(a), sb=wsjfScore(b);
+      if(sa==null && sb==null) return 0; if(sa==null) return 1; if(sb==null) return -1;
+      return sa-sb;
+    }
+    return 0;
+  }
+  function sortGridEntries(entries){
+    var field = state.gridSort.field, dir = state.gridSort.dir;
+    entries.sort(function(a,b){ var c = compareGridField(a,b,field); return dir==="desc" ? -c : c; });
+    return entries;
+  }
+  function updateScoreGridHeadIndicators(){
+    document.querySelectorAll("#scoreGridHeadRow th[data-field]").forEach(function(th){
+      var field = th.getAttribute("data-field");
+      var isSorted = state.gridSort.field === field;
+      th.classList.toggle("sorted", isSorted);
+      th.textContent = GRID_COL_LABELS[field] + (isSorted ? (state.gridSort.dir==="asc" ? " ▴" : " ▾") : "");
     });
+  }
+  function buildScoreGridRow(e){
+    var node = e.node;
+    var tr = document.createElement("tr");
+    if(node.status==="done") tr.className = "done-row";
+
+    var tdNum = document.createElement("td"); tdNum.className="sg-num"; tdNum.textContent = e.num;
+
+    var tdTitle = document.createElement("td"); tdTitle.className="sg-title";
+    var titleInp = document.createElement("input"); titleInp.type="text"; titleInp.value = node.title;
+    titleInp.addEventListener("change", function(){
+      gridUpdate(node.id, function(n){ n.title = titleInp.value.trim() || n.title; });
+    });
+    tdTitle.appendChild(titleInp);
+
+    var tdProj = document.createElement("td"); tdProj.textContent = e.crumb[0] || "";
+
+    var tdStatus = document.createElement("td");
+    var statusSel = document.createElement("select");
+    [["todo","To do"],["inprogress","In progress"],["done","Done"]].forEach(function(pair){
+      var opt = document.createElement("option"); opt.value=pair[0]; opt.textContent=pair[1];
+      if(node.status===pair[0]) opt.selected = true;
+      statusSel.appendChild(opt);
+    });
+    statusSel.addEventListener("change", function(){ gridUpdate(node.id, function(n){ n.status = statusSel.value; }); });
+    tdStatus.appendChild(statusSel);
+
+    var tdContext = document.createElement("td");
+    var ctxSel = document.createElement("select");
+    var noneOpt = document.createElement("option"); noneOpt.value=""; noneOpt.textContent="—";
+    if(!node.context) noneOpt.selected = true;
+    ctxSel.appendChild(noneOpt);
+    state.contextTags.forEach(function(c){
+      var opt = document.createElement("option"); opt.value=c; opt.textContent=c;
+      if(node.context===c) opt.selected = true;
+      ctxSel.appendChild(opt);
+    });
+    ctxSel.addEventListener("change", function(){ gridUpdate(node.id, function(n){ n.context = ctxSel.value || null; }); });
+    tdContext.appendChild(ctxSel);
+
+    var tdDue = document.createElement("td");
+    var dueInp = document.createElement("input"); dueInp.type="date"; dueInp.value = node.dueDate || "";
+    dueInp.addEventListener("change", function(){
+      gridUpdate(node.id, function(n){ n.dueDate = dueInp.value || null; if(!dueInp.value) n.dueTime=null; });
+    });
+    tdDue.appendChild(dueInp);
+
+    var tdValue = document.createElement("td"); tdValue.appendChild(makeFibSelect(node,"value"));
+    var tdTimecrit = document.createElement("td"); tdTimecrit.appendChild(makeFibSelect(node,"timecrit"));
+    var tdRisk = document.createElement("td"); tdRisk.appendChild(makeFibSelect(node,"risk"));
+    var tdSize = document.createElement("td"); tdSize.appendChild(makeFibSelect(node,"size"));
+
+    var tdWsjf = document.createElement("td"); tdWsjf.className="sg-wsjf";
+    var wsjf = wsjfScore(node);
+    tdWsjf.textContent = wsjf!=null ? wsjf.toFixed(1) : "—";
+
+    [tdNum,tdTitle,tdProj,tdStatus,tdContext,tdDue,tdValue,tdTimecrit,tdRisk,tdSize,tdWsjf].forEach(function(td){ tr.appendChild(td); });
+    return tr;
+  }
+  function renderScoreGrid(){
+    updateScoreGridHeadIndicators();
+    var activeBody = document.getElementById("scoreGridBody"); activeBody.innerHTML = "";
+    var doneBody = document.getElementById("doneGridBody"); doneBody.innerHTML = "";
+    var entries = flattenAll().filter(function(e){ return e.node.level>1; });
+    var active = entries.filter(function(e){ return e.node.status!=="done"; });
+    var done = entries.filter(function(e){ return e.node.status==="done"; });
+    sortGridEntries(active);
+    sortGridEntries(done);
+    if(active.length===0){ activeBody.innerHTML = '<tr><td colspan="11" class="empty-hint">No tasks yet.</td></tr>'; }
+    else active.forEach(function(e){ activeBody.appendChild(buildScoreGridRow(e)); });
+    if(done.length===0){ doneBody.innerHTML = '<tr><td colspan="11" class="empty-hint">Nothing completed yet.</td></tr>'; }
+    else done.forEach(function(e){ doneBody.appendChild(buildScoreGridRow(e)); });
   }
 
   // ---------------- Edit sheet ----------------
@@ -1718,6 +1844,21 @@
       renderAll();
     });
   })();
+
+  document.querySelectorAll("#scoreGridHeadRow th[data-field]").forEach(function(th){
+    th.addEventListener("click", function(){
+      var field = th.getAttribute("data-field");
+      if(state.gridSort.field === field){
+        state.gridSort.dir = state.gridSort.dir === "asc" ? "desc" : "asc";
+      } else {
+        state.gridSort.field = field;
+        state.gridSort.dir = GRID_TEXT_FIELDS[field] ? "asc" : "desc";
+      }
+      localStorage.setItem(LS_GRID_SORT_FIELD, state.gridSort.field);
+      localStorage.setItem(LS_GRID_SORT_DIR, state.gridSort.dir);
+      renderScoreGrid();
+    });
+  });
 
   document.getElementById("disconnectBtn").addEventListener("click", function(){
     showConfirm("Sign out of Google Tasks on this device? Your tasks stay safe in Google Tasks \u2014 this just forgets the local sign-in.", function(){

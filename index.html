@@ -360,9 +360,9 @@
     </div>
   </div>
   <nav class="tabs" id="mainTabs" style="display:none;">
-    <button data-view="dashboard" class="active">Dashboard</button>
+    <button data-view="dashboard">Dashboard</button>
     <button data-view="tree">Projects</button>
-    <button data-view="planner">Planner</button>
+    <button data-view="planner" class="active">Planner</button>
     <button data-view="context">By Context</button>
     <button data-view="pullqueue">Pull Queue</button>
     <button data-view="grid">Grid</button>
@@ -405,7 +405,7 @@
 
   <div id="loadBanner" class="load-banner" style="display:none;"></div>
 
-  <section class="view active" id="view-dashboard">
+  <section class="view" id="view-dashboard">
     <h2 class="section-title">Quick add<span class="rule"></span></h2>
     <div class="quick-add">
       <select id="qaProject"></select>
@@ -428,7 +428,7 @@
     <div class="tree" id="treeRoot"></div>
   </section>
 
-  <section class="view" id="view-planner">
+  <section class="view active" id="view-planner">
     <div class="planner-nav">
       <button class="btn secondary small" id="prevWeekBtn">&#8592; Prev</button>
       <span class="pn-label" id="weekLabel"></span>

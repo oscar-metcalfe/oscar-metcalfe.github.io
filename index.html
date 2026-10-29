@@ -214,12 +214,6 @@
   .day-body{padding:2px 8px;}
   .day-empty{padding:9px 3px; font-family:var(--mono); font-size:0.66rem; color:var(--text-dim);}
 
-  /* Pull Queue: three status columns (to pull / pulled / completed this
-     week) side by side once there's room; stacked on narrow screens like
-     everything else in this mobile-first layout. */
-  .pq-columns{display:flex; flex-direction:column; gap:16px;}
-  .pq-col{flex:1 1 0; min-width:0;}
-  @media (min-width:720px){ .pq-columns{flex-direction:row; align-items:flex-start;} }
 
   .ctx-group-title{
     font-family:var(--mono); font-size:0.72rem; text-transform:lowercase; letter-spacing:0.03em;
@@ -358,7 +352,6 @@
     <button data-view="tree">Projects</button>
     <button data-view="planner" class="active">Planner</button>
     <button data-view="context">By Context</button>
-    <button data-view="pullqueue">Pull Queue</button>
     <button data-view="grid">Grid</button>
     <button data-view="completed">Completed</button>
   </nav>
@@ -437,19 +430,6 @@
     <div id="contextGroups"></div>
   </section>
 
-  <section class="view" id="view-pullqueue">
-    <div class="rec-row" style="margin-bottom:12px;">
-      <span class="pn-label">Capacity <span id="wipUsage"></span></span>
-      <input type="number" id="wipLimitInput" min="1" style="max-width:70px;">
-      <span class="pn-label" id="velocityStat"></span>
-    </div>
-    <div class="pq-columns">
-      <div class="pq-col" id="pullQueueToPull"></div>
-      <div class="pq-col" id="pullQueuePulled"></div>
-      <div class="pq-col" id="pullQueueCompleted"></div>
-    </div>
-  </section>
-
   <section class="view" id="view-grid">
     <div class="score-grid-wrap">
       <table class="score-grid" id="scoreGridTable">
@@ -504,7 +484,7 @@
     </div>
 
     <div class="field" id="fWsjfField" style="display:none;">
-      <label>WSJF inputs (leave any blank to exclude from the Pull Queue)</label>
+      <label>WSJF inputs (no longer used)</label>
       <div class="rec-row">
         <select id="fValue"><option value="">Value &mdash;</option><option>1</option><option>2</option><option>3</option><option>5</option><option>8</option><option>13</option></select>
         <select id="fTimecrit"><option value="">Time crit &mdash;</option><option>1</option><option>2</option><option>3</option><option>5</option><option>8</option><option>13</option></select>
@@ -1223,101 +1203,6 @@
     });
   }
 
-  // ---------------- Pull Queue: capacity, velocity, kanban actions ----------------
-  function wipLimit(){ return parseInt(localStorage.getItem(LS_WIP_LIMIT),10) || 3; }
-  function setWipLimit(n){ localStorage.setItem(LS_WIP_LIMIT, String(n)); }
-  // Blocked still counts against WIP -- it's still yours, still stuck, and
-  // that's what creates pressure to unblock it rather than park it.
-  function kanbanUsage(){
-    return flattenAll().filter(function(e){ return e.node.level>1 && (e.node.kanban==="inprogress"||e.node.kanban==="blocked"); }).length;
-  }
-  // Job Size points completed in the last 7 days, from Google's own native
-  // `completed` timestamp -- counts any completed+sized task, whether or not
-  // it ever passed through Backlog/In Progress/Blocked.
-  function weeklyVelocity(){
-    var cutoff = Date.now() - 7*24*60*60*1000;
-    return flattenAll().filter(function(e){
-      var n=e.node;
-      return n.level>1 && n.status==="done" && n.completedAt && new Date(n.completedAt).getTime()>=cutoff;
-    }).length;
-  }
-  function setKanban(id, value){
-    var found = findNode(id); if(!found) return;
-    var node = found.node, prev = node.kanban;
-    node.kanban = value;
-    runSync(function(){ return patchTask(node.listId, node.id, {notes: encodeMeta(node)}); })
-      .then(function(){ renderAll(); })
-      .catch(function(){ node.kanban = prev; renderAll(); });
-  }
-  function pullNode(id){
-    if(kanbanUsage() >= wipLimit()){ showToast("At capacity ("+wipLimit()+") \u2014 finish or unblock something first."); return; }
-    setKanban(id, "inprogress");
-  }
-  function blockNode(id){ setKanban(id, "blocked"); }
-  function unblockNode(id){ setKanban(id, "inprogress"); }
-
-  // ---------------- Rendering: Pull Queue ----------------
-  function renderPullQueue(){
-    var toPullWrap = document.getElementById("pullQueueToPull"); toPullWrap.innerHTML="";
-    var pulledWrap = document.getElementById("pullQueuePulled"); pulledWrap.innerHTML="";
-    var completedWrap = document.getElementById("pullQueueCompleted"); completedWrap.innerHTML="";
-    document.getElementById("wipLimitInput").value = wipLimit();
-    document.getElementById("wipUsage").textContent = kanbanUsage()+"/"+wipLimit();
-    document.getElementById("velocityStat").textContent = weeklyVelocity()+" done in 7 days";
-
-    var all = flattenAll().filter(function(e){ return e.node.level>1 && e.node.status!=="done"; });
-    var backlog = all.filter(function(e){ return !e.node.kanban; });
-    var inprogress = all.filter(function(e){ return e.node.kanban==="inprogress"; });
-    var blocked = all.filter(function(e){ return e.node.kanban==="blocked"; });
-
-    // Overdue/due-today Backlog items pin above the ranked list regardless of
-    // score -- or of whether they're scored at all. A real deadline doesn't
-    // stop mattering just because a task was never WSJF'd.
-    var pinned = backlog.filter(function(e){ return e.node.dueDate && e.node.dueDate<=todayISO(); });
-    var pinnedIds = {}; pinned.forEach(function(e){ pinnedIds[e.node.id]=true; });
-    var ranked = backlog.filter(function(e){ return !pinnedIds[e.node.id]; });
-    sortEntriesByMode(ranked, state.sortMode);
-    sortEntriesByMode(pinned, state.sortMode);
-    sortEntriesByMode(inprogress, state.sortMode);
-    sortEntriesByMode(blocked, state.sortMode);
-
-    // Same rolling 7-day window weeklyVelocity() already uses -- "this
-    // week" means "completed in the last 7 days," not calendar-week-so-far.
-    var weekCutoff = Date.now() - 7*24*60*60*1000;
-    var completedThisWeek = flattenAll().filter(function(e){
-      var n = e.node;
-      return n.level>1 && n.status==="done" && n.completedAt && new Date(n.completedAt).getTime()>=weekCutoff;
-    });
-    sortEntriesByMode(completedThisWeek, state.sortMode);
-
-    function section(wrap, title, items, rowFn){
-      if(items.length===0) return;
-      var h=document.createElement("div"); h.className="ctx-group-title"; h.textContent=title+" \u00b7 "+items.length; wrap.appendChild(h);
-      var ledger=document.createElement("div"); ledger.className="ledger";
-      items.forEach(function(e){ ledger.appendChild(rowFn(e)); });
-      wrap.appendChild(ledger);
-    }
-    function actionRow(e, label, cls, action){
-      var row = buildLedgerRow(e);
-      var btn = document.createElement("button"); btn.className="btn small "+cls; btn.textContent=label;
-      if(label==="Pull" && kanbanUsage()>=wipLimit()) btn.disabled = true;
-      btn.addEventListener("click", function(ev){ ev.stopPropagation(); action(e.node.id); });
-      row.appendChild(btn);
-      return row;
-    }
-
-    section(toPullWrap, "Due now", pinned, function(e){ return actionRow(e,"Pull","",pullNode); });
-    section(toPullWrap, "Backlog", ranked, function(e){ return actionRow(e,"Pull","",pullNode); });
-    if(toPullWrap.children.length===0) toPullWrap.innerHTML = '<div class="empty-hint">Nothing in the backlog.</div>';
-
-    section(pulledWrap, "In Progress", inprogress, function(e){ return actionRow(e,"Block","secondary",blockNode); });
-    section(pulledWrap, "Blocked", blocked, function(e){ return actionRow(e,"Unblock","",unblockNode); });
-    if(pulledWrap.children.length===0) pulledWrap.innerHTML = '<div class="empty-hint">Nothing pulled yet.</div>';
-
-    section(completedWrap, "Completed this week", completedThisWeek, function(e){ return buildLedgerRow(e); });
-    if(completedWrap.children.length===0) completedWrap.innerHTML = '<div class="empty-hint">Nothing completed in the last 7 days.</div>';
-  }
-
   // ---------------- Rendering: Completed ----------------
   function renderCompletedList(){
     var wrap = document.getElementById("completedList"); wrap.innerHTML="";
@@ -1756,7 +1641,7 @@
   }
 
   function renderAll(){
-    renderQuickAddOptions(); renderProjectCards(); renderDueList(); renderTree(); renderPlanner(); renderContextView(); renderPullQueue(); renderScoreGrid(); renderCompletedList();
+    renderQuickAddOptions(); renderProjectCards(); renderDueList(); renderTree(); renderPlanner(); renderContextView(); renderScoreGrid(); renderCompletedList();
   }
 
   // ---------------- Wiring ----------------
@@ -1789,7 +1674,6 @@
   });
   document.getElementById("editOverlay").addEventListener("click", function(ev){ if(ev.target.id==="editOverlay") closeSheet(); });
 
-  document.getElementById("wipLimitInput").addEventListener("change", function(ev){ setWipLimit(parseInt(ev.target.value,10)||3); renderPullQueue(); });
 
   document.getElementById("prevWeekBtn").addEventListener("click", function(){ weekOffset--; renderPlanner(); });
   document.getElementById("nextWeekBtn").addEventListener("click", function(){ weekOffset++; renderPlanner(); });

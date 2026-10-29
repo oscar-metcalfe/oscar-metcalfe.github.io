@@ -175,9 +175,13 @@
   .node-row:active{background:var(--paper-dim);}
   .node-children{margin-left:16px; border-left:1px dashed var(--rule); padding-left:0;}
   .toggle-caret{
-    flex:0 0 auto; width:16px; text-align:center; font-family:var(--mono); font-size:0.75rem;
-    color:var(--text-dim); user-select:none;
+    flex:0 0 auto; width:36px; height:36px; display:flex; align-items:center; justify-content:center;
+    border:1px solid var(--rule); border-radius:8px; background:var(--paper-dim); color:var(--accent);
+    font-family:var(--mono); font-size:1rem; line-height:1; padding:0; cursor:pointer; user-select:none;
   }
+  .toggle-caret[aria-expanded="true"]{background:var(--accent-soft); border-color:var(--accent);}
+  .toggle-caret.leaf{border-color:transparent; background:transparent; color:var(--text-dim); cursor:default;}
+  .toggle-caret:focus-visible, .ctx-group-head:focus-visible{outline:2px solid var(--accent); outline-offset:2px;}
   .ctrl-num{flex:0 0 auto; font-family:var(--mono); font-size:0.66rem; color:var(--amber); min-width:34px;}
   .node-check{
     flex:0 0 auto; width:16px; height:16px; border:1.5px solid var(--text-dim); border-radius:3px;
@@ -215,10 +219,14 @@
   .day-empty{padding:9px 3px; font-family:var(--mono); font-size:0.66rem; color:var(--text-dim);}
 
 
+  .ctx-group-head{
+    display:flex; align-items:center; gap:10px; width:100%; min-height:44px; margin:10px 0 2px 0;
+    padding:2px 0; background:none; border:0; text-align:left; color:inherit; font:inherit; cursor:pointer;
+  }
   .ctx-group-title{
     font-family:var(--mono); font-size:0.72rem; text-transform:lowercase; letter-spacing:0.03em;
     color:var(--slate); background:var(--slate-dim); display:inline-block; padding:3px 9px;
-    border-radius:10px; margin:18px 0 4px 0;
+    border-radius:10px;
   }
 
   .overlay{
@@ -535,6 +543,7 @@
     lists: [],          // array of level-1 nodes: {id, level:1, title, children:[level2...]}
     contextTags: DEFAULT_CONTEXTS.slice(),
     expanded: {},
+    ctxExpanded: {},
     sortMode: "number" // sort menu removed 29 Oct 2026: lists keep task-number order
   };
 
@@ -1031,15 +1040,26 @@
     shown.forEach(function(p){ root.appendChild(buildNodeEl(p, byId[p.id])); });
   }
 
+  // Large tap target for expand/collapse (tree rows and context groups)
+  function makeCaret(canExpand, isExpanded, label){
+    var c = document.createElement(canExpand ? "button" : "div");
+    c.className = "toggle-caret" + (canExpand ? "" : " leaf");
+    c.textContent = canExpand ? (isExpanded ? "\u25be" : "\u25b8") : "\u00b7";
+    if(canExpand){
+      c.type = "button";
+      c.setAttribute("aria-expanded", isExpanded ? "true" : "false");
+      c.setAttribute("aria-label", (isExpanded ? "Collapse " : "Expand ") + label);
+    }
+    return c;
+  }
+
   function buildNodeEl(node, num){
     var wrap = document.createElement("div");
     wrap.className = "node"; wrap.setAttribute("data-node-id", node.id);
     var row = document.createElement("div"); row.className = "node-row";
     var hasChildren = visibleChildren(node).length>0;
     var isExpanded = !!state.expanded[node.id];
-    var caret = document.createElement("div");
-    caret.className = "toggle-caret";
-    caret.textContent = hasChildren ? (isExpanded ? "\u25be" : "\u25b8") : "\u00b7";
+    var caret = makeCaret(hasChildren, isExpanded, node.title);
     caret.addEventListener("click", function(ev){ ev.stopPropagation(); if(!hasChildren) return; state.expanded[node.id]=!state.expanded[node.id]; renderTree(); });
     var ctrl = document.createElement("div"); ctrl.className="ctrl-num"; ctrl.textContent=num;
     var check = document.createElement("div");
@@ -1137,7 +1157,16 @@
     var groups = {};
     all.forEach(function(e){ var k=e.node.context; groups[k]=groups[k]||[]; groups[k].push(e); });
     Object.keys(groups).sort().forEach(function(tag){
-      var h=document.createElement("div"); h.className="ctx-group-title"; h.textContent="@"+tag+" \u00b7 "+groups[tag].length; wrap.appendChild(h);
+      var open = !!state.ctxExpanded[tag];
+      var head=document.createElement("button"); head.type="button"; head.className="ctx-group-head";
+      head.setAttribute("aria-expanded", open ? "true" : "false");
+      var caret = makeCaret(true, open, "@"+tag);
+      caret.removeAttribute("aria-label"); caret.setAttribute("aria-hidden","true"); caret.tabIndex = -1;
+      var h=document.createElement("span"); h.className="ctx-group-title"; h.textContent="@"+tag+" \u00b7 "+groups[tag].length;
+      head.appendChild(caret); head.appendChild(h);
+      head.addEventListener("click", function(){ state.ctxExpanded[tag]=!state.ctxExpanded[tag]; renderContextView(); });
+      wrap.appendChild(head);
+      if(!open) return;
       var ledger=document.createElement("div"); ledger.className="ledger";
       sortEntriesByMode(groups[tag], state.sortMode).forEach(function(e){ ledger.appendChild(buildLedgerRow(e)); });
       wrap.appendChild(ledger);

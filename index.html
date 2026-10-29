@@ -285,17 +285,12 @@
     width:100%; max-width:100%; box-sizing:border-box; font-family:var(--sans); font-size:0.64rem; padding:1px 2px;
     border:1px solid var(--rule); border-radius:3px; background:var(--surface); color:var(--text);
   }
-  .score-grid th:nth-child(1), .score-grid td:nth-child(1){width:4%;}
-  .score-grid th:nth-child(2), .score-grid td:nth-child(2){width:18%;}
-  .score-grid th:nth-child(3), .score-grid td:nth-child(3){width:11%;}
-  .score-grid th:nth-child(4), .score-grid td:nth-child(4){width:9%;}
-  .score-grid th:nth-child(5), .score-grid td:nth-child(5){width:9%;}
-  .score-grid th:nth-child(6), .score-grid td:nth-child(6){width:10%;}
-  .score-grid th:nth-child(7), .score-grid td:nth-child(7){width:8%;}
-  .score-grid th:nth-child(8), .score-grid td:nth-child(8){width:8%;}
-  .score-grid th:nth-child(9), .score-grid td:nth-child(9){width:8%;}
-  .score-grid th:nth-child(10), .score-grid td:nth-child(10){width:8%;}
-  .score-grid th:nth-child(11), .score-grid td:nth-child(11){width:7%;}
+  .score-grid th:nth-child(1), .score-grid td:nth-child(1){width:6%;}
+  .score-grid th:nth-child(2), .score-grid td:nth-child(2){width:36%;}
+  .score-grid th:nth-child(3), .score-grid td:nth-child(3){width:18%;}
+  .score-grid th:nth-child(4), .score-grid td:nth-child(4){width:14%;}
+  .score-grid th:nth-child(5), .score-grid td:nth-child(5){width:12%;}
+  .score-grid th:nth-child(6), .score-grid td:nth-child(6){width:14%;}
   .switch{
     position:relative; width:38px; height:22px; background:var(--paper-dim-2); border-radius:11px;
     flex:0 0 auto; cursor:pointer; border:1px solid var(--rule);
@@ -353,8 +348,6 @@
     <div class="header-actions">
       <span class="save-indicator" id="saveIndicator" title="Sync status"></span>
       <select class="icon-btn" id="sortModeSelect" style="display:none;" title="Sort order">
-        <option value="wsjf-desc">Sort: WSJF &darr;</option>
-        <option value="wsjf-asc">Sort: WSJF &uarr;</option>
         <option value="number">Sort: Task #</option>
         <option value="alpha-asc">Sort: A&rarr;Z</option>
         <option value="alpha-desc">Sort: Z&rarr;A</option>
@@ -468,8 +461,6 @@
           <tr id="scoreGridHeadRow">
             <th data-field="num">#</th><th data-field="title">Task</th><th data-field="project">Project</th>
             <th data-field="status">Status</th><th data-field="context">Context</th><th data-field="due">Due</th>
-            <th data-field="value">Value</th><th data-field="timecrit">Time Crit</th><th data-field="risk">Risk/Opp</th>
-            <th data-field="size">Size</th><th data-field="wsjf">WSJF</th>
           </tr>
         </thead>
         <tbody id="scoreGridBody"></tbody>
@@ -481,7 +472,6 @@
         <thead>
           <tr>
             <th>#</th><th>Task</th><th>Project</th><th>Status</th><th>Context</th><th>Due</th>
-            <th>Value</th><th>Time Crit</th><th>Risk/Opp</th><th>Size</th><th>WSJF</th>
           </tr>
         </thead>
         <tbody id="doneGridBody"></tbody>
@@ -517,7 +507,7 @@
       </div>
     </div>
 
-    <div class="field" id="fWsjfField">
+    <div class="field" id="fWsjfField" style="display:none;">
       <label>WSJF inputs (leave any blank to exclude from the Pull Queue)</label>
       <div class="rec-row">
         <select id="fValue"><option value="">Value &mdash;</option><option>1</option><option>2</option><option>3</option><option>5</option><option>8</option><option>13</option></select>
@@ -628,7 +618,7 @@
     lists: [],          // array of level-1 nodes: {id, level:1, title, children:[level2...]}
     contextTags: DEFAULT_CONTEXTS.slice(),
     expanded: {},
-    sortMode: localStorage.getItem(LS_SORT_MODE) || "wsjf-desc"
+    sortMode: (function(m){ return (m && m.indexOf("wsjf")!==0) ? m : "number"; })(localStorage.getItem(LS_SORT_MODE))
   };
 
   var tokenClient = null;
@@ -730,22 +720,17 @@
       var c = ta<tb ? -1 : ta>tb ? 1 : 0;
       return mode==="alpha-desc" ? -c : c;
     }
-    var sa=wsjfScore(a), sb=wsjfScore(b);
-    if(sa==null && sb==null) return 0;
-    if(sa==null) return 1;   // unscored sinks to the bottom either direction
-    if(sb==null) return -1;
-    var c2 = sa - sb;
-    return mode==="wsjf-asc" ? c2 : -c2;
+    return 0; // WSJF sorting dropped 29 Oct 2026: anything else keeps task-number order
   }
   // For flattenAll()-derived {node, num, ...} entries.
   function sortEntriesByMode(entries, mode){
-    if(mode==="number") entries.sort(function(a,b){ return compareTaskNumbers(a.num, b.num); });
+    if(mode!=="alpha-asc" && mode!=="alpha-desc") entries.sort(function(a,b){ return compareTaskNumbers(a.num, b.num); });
     else entries.sort(function(a,b){ return compareNodesByMode(a.node, b.node, mode); });
     return entries;
   }
   // For raw tree-children node arrays (no num/entry wrapper).
   function sortNodesByMode(nodes, mode){
-    if(mode==="number") return nodes; // task number IS the tree's own position order
+    if(mode!=="alpha-asc" && mode!=="alpha-desc") return nodes; // task number IS the tree's own position order
     nodes = nodes.slice();
     nodes.sort(function(a,b){ return compareNodesByMode(a,b,mode); });
     return nodes;
@@ -1111,8 +1096,6 @@
     body.appendChild(title); body.appendChild(crumb);
     var right = document.createElement("div");
     right.className = "lr-right";
-    var wsjf = wsjfScore(node);
-    if(wsjf!=null) right.appendChild(makeChip("WSJF "+wsjf.toFixed(1), "pri-med"));
     if(node.context){ var chip=document.createElement("span"); chip.className="chip ctx"; chip.textContent="@"+node.context; right.appendChild(chip); }
     if(node.dueDate){ var d=document.createElement("span"); d.className="lr-date"+(overdue?" overdue":""); d.textContent=fmtDue(node.dueDate, node.dueTime); right.appendChild(d); }
     row.appendChild(check); row.appendChild(body); row.appendChild(right);
@@ -1153,8 +1136,6 @@
     title.textContent = node.title;
     mainWrap.appendChild(title);
     var sub = document.createElement("div"); sub.className="node-sub";
-    var wsjf = wsjfScore(node);
-    if(wsjf!=null) sub.appendChild(makeChip("WSJF "+wsjf.toFixed(1), "pri-med"));
     if(node.context) sub.appendChild(makeChip("@"+node.context,"ctx"));
     if(node.dueDate) sub.appendChild(makeChip(fmtDue(node.dueDate, node.dueTime), (node.dueDate<todayISO() && node.status!=="done") ? "pri-high":"repeat"));
     if(node.recurrence) sub.appendChild(makeChip(recurSummary(node.recurrence),"repeat"));
@@ -1261,8 +1242,8 @@
     var cutoff = Date.now() - 7*24*60*60*1000;
     return flattenAll().filter(function(e){
       var n=e.node;
-      return n.level>1 && n.status==="done" && n.size && n.completedAt && new Date(n.completedAt).getTime()>=cutoff;
-    }).reduce(function(sum,e){ return sum+e.node.size; }, 0);
+      return n.level>1 && n.status==="done" && n.completedAt && new Date(n.completedAt).getTime()>=cutoff;
+    }).length;
   }
   function setKanban(id, value){
     var found = findNode(id); if(!found) return;
@@ -1286,7 +1267,7 @@
     var completedWrap = document.getElementById("pullQueueCompleted"); completedWrap.innerHTML="";
     document.getElementById("wipLimitInput").value = wipLimit();
     document.getElementById("wipUsage").textContent = kanbanUsage()+"/"+wipLimit();
-    document.getElementById("velocityStat").textContent = weeklyVelocity()+" pts/wk";
+    document.getElementById("velocityStat").textContent = weeklyVelocity()+" done in 7 days";
 
     var all = flattenAll().filter(function(e){ return e.node.level>1 && e.node.status!=="done"; });
     var backlog = all.filter(function(e){ return !e.node.kanban; });
@@ -1298,7 +1279,7 @@
     // stop mattering just because a task was never WSJF'd.
     var pinned = backlog.filter(function(e){ return e.node.dueDate && e.node.dueDate<=todayISO(); });
     var pinnedIds = {}; pinned.forEach(function(e){ pinnedIds[e.node.id]=true; });
-    var ranked = backlog.filter(function(e){ return !pinnedIds[e.node.id] && wsjfScore(e.node)!=null; });
+    var ranked = backlog.filter(function(e){ return !pinnedIds[e.node.id]; });
     sortEntriesByMode(ranked, state.sortMode);
     sortEntriesByMode(pinned, state.sortMode);
     sortEntriesByMode(inprogress, state.sortMode);
@@ -1330,8 +1311,8 @@
     }
 
     section(toPullWrap, "Due now", pinned, function(e){ return actionRow(e,"Pull","",pullNode); });
-    section(toPullWrap, "Backlog (by WSJF)", ranked, function(e){ return actionRow(e,"Pull","",pullNode); });
-    if(toPullWrap.children.length===0) toPullWrap.innerHTML = '<div class="empty-hint">Nothing scored yet. Open a task and set Value/Time Criticality/Risk/Size to add it to the queue.</div>';
+    section(toPullWrap, "Backlog", ranked, function(e){ return actionRow(e,"Pull","",pullNode); });
+    if(toPullWrap.children.length===0) toPullWrap.innerHTML = '<div class="empty-hint">Nothing in the backlog.</div>';
 
     section(pulledWrap, "In Progress", inprogress, function(e){ return actionRow(e,"Block","secondary",blockNode); });
     section(pulledWrap, "Blocked", blocked, function(e){ return actionRow(e,"Unblock","",unblockNode); });
@@ -1389,7 +1370,7 @@
   var GRID_COL_LABELS = {num:"#", title:"Task", project:"Project", status:"Status", context:"Context", due:"Due", value:"Value", timecrit:"Time Crit", risk:"Risk/Opp", size:"Size", wsjf:"WSJF"};
   var GRID_TEXT_FIELDS = {title:1, project:1, status:1, context:1, due:1}; // default ascending; numeric fields default descending
   state.gridSort = {
-    field: localStorage.getItem(LS_GRID_SORT_FIELD) || "wsjf",
+    field: (function(f){ return (f && !/^(value|timecrit|risk|size|wsjf)$/.test(f)) ? f : "num"; })(localStorage.getItem(LS_GRID_SORT_FIELD)),
     dir: localStorage.getItem(LS_GRID_SORT_DIR) || "desc"
   };
 
@@ -1486,16 +1467,7 @@
     });
     tdDue.appendChild(dueInp);
 
-    var tdValue = document.createElement("td"); tdValue.appendChild(makeFibSelect(node,"value"));
-    var tdTimecrit = document.createElement("td"); tdTimecrit.appendChild(makeFibSelect(node,"timecrit"));
-    var tdRisk = document.createElement("td"); tdRisk.appendChild(makeFibSelect(node,"risk"));
-    var tdSize = document.createElement("td"); tdSize.appendChild(makeFibSelect(node,"size"));
-
-    var tdWsjf = document.createElement("td"); tdWsjf.className="sg-wsjf";
-    var wsjf = wsjfScore(node);
-    tdWsjf.textContent = wsjf!=null ? wsjf.toFixed(1) : "—";
-
-    [tdNum,tdTitle,tdProj,tdStatus,tdContext,tdDue,tdValue,tdTimecrit,tdRisk,tdSize,tdWsjf].forEach(function(td){ tr.appendChild(td); });
+    [tdNum,tdTitle,tdProj,tdStatus,tdContext,tdDue].forEach(function(td){ tr.appendChild(td); });
     return tr;
   }
   function renderScoreGrid(){
@@ -1507,9 +1479,9 @@
     var done = entries.filter(function(e){ return e.node.status==="done"; });
     sortGridEntries(active);
     sortGridEntries(done);
-    if(active.length===0){ activeBody.innerHTML = '<tr><td colspan="11" class="empty-hint">No tasks yet.</td></tr>'; }
+    if(active.length===0){ activeBody.innerHTML = '<tr><td colspan="6" class="empty-hint">No tasks yet.</td></tr>'; }
     else active.forEach(function(e){ activeBody.appendChild(buildScoreGridRow(e)); });
-    if(done.length===0){ doneBody.innerHTML = '<tr><td colspan="11" class="empty-hint">Nothing completed yet.</td></tr>'; }
+    if(done.length===0){ doneBody.innerHTML = '<tr><td colspan="6" class="empty-hint">Nothing completed yet.</td></tr>'; }
     else done.forEach(function(e){ doneBody.appendChild(buildScoreGridRow(e)); });
   }
 
@@ -1564,7 +1536,7 @@
     document.getElementById("fDue").parentElement.parentElement.style.display = isLvl1 ? "none":"block";
     document.getElementById("fContextChips").parentElement.style.display = isLvl1 ? "none":"block";
     document.getElementById("fRecurSwitch").parentElement.parentElement.style.display = isLvl1 ? "none":"block";
-    document.getElementById("fWsjfField").style.display = isLvl1 ? "none":"block";
+    document.getElementById("fWsjfField").style.display = "none"; // WSJF dropped 29 Oct 2026; hidden fields keep saved scores in the notes
 
     var showSubitems = node.level===3;
     document.getElementById("fSubitemsField").style.display = showSubitems ? "block":"none";
@@ -1763,7 +1735,6 @@
       var statusMark = e.node.status==="done" ? "[x]" : "[ ]";
       var bits = [indent+e.num+". "+statusMark+" "+e.node.title];
       var meta=[];
-      if(wsjfScore(e.node)!=null) meta.push("wsjf:"+wsjfScore(e.node).toFixed(1));
       if(e.node.context) meta.push("@"+e.node.context);
       if(e.node.dueDate) meta.push("due:"+e.node.dueDate+(e.node.dueTime?(" "+e.node.dueTime):""));
       if(e.node.recurrence) meta.push(recurSummary(e.node.recurrence));

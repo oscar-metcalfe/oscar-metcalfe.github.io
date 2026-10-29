@@ -258,34 +258,6 @@
   .chip-opt.selected{background:var(--slate-dim); color:var(--slate); border-color:var(--slate);}
   .rec-row{display:flex; align-items:center; gap:8px;}
   .rec-row select, .rec-row input{width:auto; flex:1;}
-  /* table-layout:fixed + explicit per-column percentages (summing to
-     100) so the whole grid fits the viewport width with no horizontal
-     scrollbar -- cells clip with ellipsis instead of forcing overflow. */
-  .score-grid-wrap{overflow-x:hidden;}
-  .score-grid{width:100%; table-layout:fixed; border-collapse:collapse; font-size:0.7rem;}
-  .score-grid th{
-    font-family:var(--mono); font-size:0.56rem; text-transform:uppercase; letter-spacing:0.02em;
-    color:var(--text-dim); text-align:left; padding:4px 3px; border-bottom:1px solid var(--rule);
-    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
-  }
-  #scoreGridHeadRow th{cursor:pointer; user-select:none;}
-  #scoreGridHeadRow th:hover{color:var(--text);}
-  #scoreGridHeadRow th.sorted{color:var(--slate);}
-  .score-grid td{padding:2px 3px; border-bottom:1px solid var(--rule); vertical-align:middle; overflow:hidden;}
-  .score-grid tr.done-row{opacity:0.5;}
-  .score-grid td.sg-num{font-family:var(--mono); font-size:0.6rem; color:var(--text-dim); white-space:nowrap; text-overflow:ellipsis;}
-  .score-grid td.sg-title{overflow:hidden; text-overflow:ellipsis;}
-  .score-grid td.sg-wsjf{font-family:var(--mono); font-size:0.68rem; white-space:nowrap; text-align:right;}
-  .score-grid input[type=text], .score-grid input[type=date], .score-grid select{
-    width:100%; max-width:100%; box-sizing:border-box; font-family:var(--sans); font-size:0.64rem; padding:1px 2px;
-    border:1px solid var(--rule); border-radius:3px; background:var(--surface); color:var(--text);
-  }
-  .score-grid th:nth-child(1), .score-grid td:nth-child(1){width:6%;}
-  .score-grid th:nth-child(2), .score-grid td:nth-child(2){width:36%;}
-  .score-grid th:nth-child(3), .score-grid td:nth-child(3){width:18%;}
-  .score-grid th:nth-child(4), .score-grid td:nth-child(4){width:14%;}
-  .score-grid th:nth-child(5), .score-grid td:nth-child(5){width:12%;}
-  .score-grid th:nth-child(6), .score-grid td:nth-child(6){width:14%;}
   .switch{
     position:relative; width:38px; height:22px; background:var(--paper-dim-2); border-radius:11px;
     flex:0 0 auto; cursor:pointer; border:1px solid var(--rule);
@@ -352,8 +324,6 @@
     <button data-view="tree">Projects</button>
     <button data-view="planner" class="active">Planner</button>
     <button data-view="context">By Context</button>
-    <button data-view="grid">Grid</button>
-    <button data-view="completed">Completed</button>
   </nav>
 </header>
 
@@ -428,35 +398,6 @@
 
   <section class="view" id="view-context">
     <div id="contextGroups"></div>
-  </section>
-
-  <section class="view" id="view-grid">
-    <div class="score-grid-wrap">
-      <table class="score-grid" id="scoreGridTable">
-        <thead>
-          <tr id="scoreGridHeadRow">
-            <th data-field="num">#</th><th data-field="title">Task</th><th data-field="project">Project</th>
-            <th data-field="status">Status</th><th data-field="context">Context</th><th data-field="due">Due</th>
-          </tr>
-        </thead>
-        <tbody id="scoreGridBody"></tbody>
-      </table>
-    </div>
-    <h2 class="section-title"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 12.5l3 3 5-6.5"/></svg>Completed<span class="rule"></span></h2>
-    <div class="score-grid-wrap">
-      <table class="score-grid" id="doneGridTable">
-        <thead>
-          <tr>
-            <th>#</th><th>Task</th><th>Project</th><th>Status</th><th>Context</th><th>Due</th>
-          </tr>
-        </thead>
-        <tbody id="doneGridBody"></tbody>
-      </table>
-    </div>
-  </section>
-
-  <section class="view" id="view-completed">
-    <div class="ledger" id="completedList"></div>
   </section>
 
 </main>
@@ -1203,169 +1144,6 @@
     });
   }
 
-  // ---------------- Rendering: Completed ----------------
-  function renderCompletedList(){
-    var wrap = document.getElementById("completedList"); wrap.innerHTML="";
-    var items = flattenAll().filter(function(e){ return e.node.level>1 && e.node.status==="done"; });
-    sortEntriesByMode(items, state.sortMode);
-    if(items.length===0){ wrap.innerHTML = '<div class="empty-hint">Nothing completed yet.</div>'; return; }
-    items.forEach(function(e){ wrap.appendChild(buildLedgerRow(e)); });
-  }
-
-  // ---------------- Rendering: Score Grid ----------------
-  // Every field editable inline, one row per task -- reuses the same
-  // patchTask/encodeMeta path the edit sheet uses, so the two stay in sync.
-  // Recurrence, checklist, and free notes are structured/multi-line and
-  // don't fit a compact row -- still editable via the existing edit sheet.
-  var FIB_OPTS = ["","1","2","3","5","8","13","21","34","55","89","144"];
-  function makeFibSelect(node, field){
-    var sel = document.createElement("select");
-    FIB_OPTS.forEach(function(v){
-      var opt = document.createElement("option"); opt.value=v; opt.textContent = v===""?"—":v;
-      if(String(node[field]==null?"":node[field])===v) opt.selected = true;
-      sel.appendChild(opt);
-    });
-    sel.addEventListener("change", function(){
-      gridUpdate(node.id, function(n){ n[field] = sel.value===""?null:parseInt(sel.value,10); });
-    });
-    return sel;
-  }
-  function gridUpdate(nodeId, mutator){
-    var found = findNode(nodeId);
-    if(!found) return;
-    var node = found.node;
-    var snapshot = Object.assign({}, node);
-    mutator(node);
-    var patchBody = {title:node.title, notes:encodeMeta(node), status: node.status==="done" ? "completed":"needsAction"};
-    patchBody.due = node.dueDate ? encodeDue(node.dueDate, node.dueTime) : null;
-    runSync(function(){ return patchTask(node.listId, node.id, patchBody); })
-      .then(function(){ renderAll(); })
-      .catch(function(){ Object.assign(node, snapshot); renderAll(); });
-  }
-  // Grid has its own click-to-sort-by-column state, independent of the
-  // app-wide sort-mode dropdown (which still governs every other tab) --
-  // a spreadsheet-style header click is the more natural fit for this
-  // one dense, all-fields-visible table.
-  var LS_GRID_SORT_FIELD = "gt-tracker-grid-sort-field";
-  var LS_GRID_SORT_DIR = "gt-tracker-grid-sort-dir";
-  var GRID_COL_LABELS = {num:"#", title:"Task", project:"Project", status:"Status", context:"Context", due:"Due", value:"Value", timecrit:"Time Crit", risk:"Risk/Opp", size:"Size", wsjf:"WSJF"};
-  var GRID_TEXT_FIELDS = {title:1, project:1, status:1, context:1, due:1}; // default ascending; numeric fields default descending
-  state.gridSort = {
-    field: (function(f){ return (f && !/^(value|timecrit|risk|size|wsjf)$/.test(f)) ? f : "num"; })(localStorage.getItem(LS_GRID_SORT_FIELD)),
-    dir: localStorage.getItem(LS_GRID_SORT_DIR) || "desc"
-  };
-
-  function compareGridField(entryA, entryB, field){
-    var a = entryA.node, b = entryB.node;
-    if(field==="num") return compareTaskNumbers(entryA.num, entryB.num);
-    if(field==="title"){
-      var ta=(a.title||"").toLowerCase(), tb=(b.title||"").toLowerCase();
-      return ta<tb ? -1 : ta>tb ? 1 : 0;
-    }
-    if(field==="project"){
-      var pa=(entryA.crumb[0]||"").toLowerCase(), pb=(entryB.crumb[0]||"").toLowerCase();
-      return pa<pb ? -1 : pa>pb ? 1 : 0;
-    }
-    if(field==="status") return (a.status||"").localeCompare(b.status||"");
-    if(field==="context"){
-      var ca=a.context||"", cb=b.context||"";
-      if(!ca && !cb) return 0; if(!ca) return 1; if(!cb) return -1;
-      return ca<cb ? -1 : ca>cb ? 1 : 0;
-    }
-    if(field==="due"){
-      var da=a.dueDate||"", db=b.dueDate||"";
-      if(!da && !db) return 0; if(!da) return 1; if(!db) return -1;
-      return da<db ? -1 : da>db ? 1 : 0;
-    }
-    if(field==="value" || field==="timecrit" || field==="risk" || field==="size"){
-      var va=a[field], vb=b[field];
-      if(va==null && vb==null) return 0; if(va==null) return 1; if(vb==null) return -1;
-      return va-vb;
-    }
-    if(field==="wsjf"){
-      var sa=wsjfScore(a), sb=wsjfScore(b);
-      if(sa==null && sb==null) return 0; if(sa==null) return 1; if(sb==null) return -1;
-      return sa-sb;
-    }
-    return 0;
-  }
-  function sortGridEntries(entries){
-    var field = state.gridSort.field, dir = state.gridSort.dir;
-    entries.sort(function(a,b){ var c = compareGridField(a,b,field); return dir==="desc" ? -c : c; });
-    return entries;
-  }
-  function updateScoreGridHeadIndicators(){
-    document.querySelectorAll("#scoreGridHeadRow th[data-field]").forEach(function(th){
-      var field = th.getAttribute("data-field");
-      var isSorted = state.gridSort.field === field;
-      th.classList.toggle("sorted", isSorted);
-      th.textContent = GRID_COL_LABELS[field] + (isSorted ? (state.gridSort.dir==="asc" ? " ▴" : " ▾") : "");
-    });
-  }
-  function buildScoreGridRow(e){
-    var node = e.node;
-    var tr = document.createElement("tr");
-    if(node.status==="done") tr.className = "done-row";
-
-    var tdNum = document.createElement("td"); tdNum.className="sg-num"; tdNum.textContent = e.num;
-
-    var tdTitle = document.createElement("td"); tdTitle.className="sg-title";
-    var titleInp = document.createElement("input"); titleInp.type="text"; titleInp.value = node.title;
-    titleInp.addEventListener("change", function(){
-      gridUpdate(node.id, function(n){ n.title = titleInp.value.trim() || n.title; });
-    });
-    tdTitle.appendChild(titleInp);
-
-    var tdProj = document.createElement("td"); tdProj.textContent = e.crumb[0] || "";
-
-    var tdStatus = document.createElement("td");
-    var statusSel = document.createElement("select");
-    [["todo","To do"],["inprogress","In progress"],["done","Done"]].forEach(function(pair){
-      var opt = document.createElement("option"); opt.value=pair[0]; opt.textContent=pair[1];
-      if(node.status===pair[0]) opt.selected = true;
-      statusSel.appendChild(opt);
-    });
-    statusSel.addEventListener("change", function(){ gridUpdate(node.id, function(n){ n.status = statusSel.value; }); });
-    tdStatus.appendChild(statusSel);
-
-    var tdContext = document.createElement("td");
-    var ctxSel = document.createElement("select");
-    var noneOpt = document.createElement("option"); noneOpt.value=""; noneOpt.textContent="—";
-    if(!node.context) noneOpt.selected = true;
-    ctxSel.appendChild(noneOpt);
-    state.contextTags.forEach(function(c){
-      var opt = document.createElement("option"); opt.value=c; opt.textContent=c;
-      if(node.context===c) opt.selected = true;
-      ctxSel.appendChild(opt);
-    });
-    ctxSel.addEventListener("change", function(){ gridUpdate(node.id, function(n){ n.context = ctxSel.value || null; }); });
-    tdContext.appendChild(ctxSel);
-
-    var tdDue = document.createElement("td");
-    var dueInp = document.createElement("input"); dueInp.type="date"; dueInp.value = node.dueDate || "";
-    dueInp.addEventListener("change", function(){
-      gridUpdate(node.id, function(n){ n.dueDate = dueInp.value || null; if(!dueInp.value) n.dueTime=null; });
-    });
-    tdDue.appendChild(dueInp);
-
-    [tdNum,tdTitle,tdProj,tdStatus,tdContext,tdDue].forEach(function(td){ tr.appendChild(td); });
-    return tr;
-  }
-  function renderScoreGrid(){
-    updateScoreGridHeadIndicators();
-    var activeBody = document.getElementById("scoreGridBody"); activeBody.innerHTML = "";
-    var doneBody = document.getElementById("doneGridBody"); doneBody.innerHTML = "";
-    var entries = flattenAll().filter(function(e){ return e.node.level>1; });
-    var active = entries.filter(function(e){ return e.node.status!=="done"; });
-    var done = entries.filter(function(e){ return e.node.status==="done"; });
-    sortGridEntries(active);
-    sortGridEntries(done);
-    if(active.length===0){ activeBody.innerHTML = '<tr><td colspan="6" class="empty-hint">No tasks yet.</td></tr>'; }
-    else active.forEach(function(e){ activeBody.appendChild(buildScoreGridRow(e)); });
-    if(done.length===0){ doneBody.innerHTML = '<tr><td colspan="6" class="empty-hint">Nothing completed yet.</td></tr>'; }
-    else done.forEach(function(e){ doneBody.appendChild(buildScoreGridRow(e)); });
-  }
-
   // ---------------- Edit sheet ----------------
   function openEditSheet(nodeId, focusAddChecklist){
     var found = findNode(nodeId);
@@ -1641,7 +1419,7 @@
   }
 
   function renderAll(){
-    renderQuickAddOptions(); renderProjectCards(); renderDueList(); renderTree(); renderPlanner(); renderContextView(); renderScoreGrid(); renderCompletedList();
+    renderQuickAddOptions(); renderProjectCards(); renderDueList(); renderTree(); renderPlanner(); renderContextView();
   }
 
   // ---------------- Wiring ----------------
@@ -1691,21 +1469,6 @@
 
   document.getElementById("refreshBtn").addEventListener("click", function(){ reloadAndRender(); });
 
-
-  document.querySelectorAll("#scoreGridHeadRow th[data-field]").forEach(function(th){
-    th.addEventListener("click", function(){
-      var field = th.getAttribute("data-field");
-      if(state.gridSort.field === field){
-        state.gridSort.dir = state.gridSort.dir === "asc" ? "desc" : "asc";
-      } else {
-        state.gridSort.field = field;
-        state.gridSort.dir = GRID_TEXT_FIELDS[field] ? "asc" : "desc";
-      }
-      localStorage.setItem(LS_GRID_SORT_FIELD, state.gridSort.field);
-      localStorage.setItem(LS_GRID_SORT_DIR, state.gridSort.dir);
-      renderScoreGrid();
-    });
-  });
 
   document.getElementById("disconnectBtn").addEventListener("click", function(){
     showConfirm("Sign out of Google Tasks on this device? Your tasks stay safe in Google Tasks \u2014 this just forgets the local sign-in.", function(){
